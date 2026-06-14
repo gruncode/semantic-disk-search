@@ -22,8 +22,8 @@ dsearch-multimodel --model gte "my query"         # compare across 5 embedding m
 
 ![Pipeline](docs/pipeline.svg)
 
-**Typical cost per answer run:** ~$0.20–0.40 (Claude API + Cohere API).  
-**Deep mode:** ~$0.30–0.60.
+**Typical cost per answer run:** ~$0.01–0.02 (Cohere API only — Claude runs via your existing subscription, no per-token billing).  
+**Deep mode:** ~$0.02–0.04 (a few extra Cohere queries for the extra retrieval rounds).
 
 > **Interactive diagrams:** [`docs/architecture.html`](docs/architecture.html) — how the pipeline works (drag nodes, click for detail) · [`docs/setup.html`](docs/setup.html) — step-by-step setup guide with full commands
 
@@ -364,7 +364,7 @@ The answer pipeline uses `claude -p` (Claude Code headless mode) so it inherits 
 Vocabulary mismatch is the main failure mode for domain-specific document search. A generated hypothetical answer contains the domain vocabulary that the real documents use, dramatically improving recall on terminology-gap queries.
 
 **Why agent ranking instead of a reranker?**  
-Cross-encoder rerankers require running a model locally per (query, doc) pair — expensive at 100 documents. Claude agents read the actual extracted text and score on relevance to the *intent*, not just lexical similarity. The subscription cost (~$0.10–0.20 for 10 agents) is cheaper than spinning up a GPU reranker.
+Cross-encoder rerankers require running a model locally per (query, doc) pair — expensive at 100 documents. Claude agents read the actual extracted text and score on relevance to the *intent*, not just lexical similarity. Running 10 agents via subscription costs nothing extra per query — no per-token billing — while spinning up a GPU reranker would require local hardware or cloud GPU time.
 
 ---
 

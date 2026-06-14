@@ -1,101 +1,84 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 678" width="800">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 832" width="760">
   <defs>
-    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0L10 5L0 10z" fill="#6b7a99"/>
-    </marker>
-    <marker id="ahp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0 0L10 5L0 10z" fill="rgba(139,120,230,0.7)"/>
     </marker>
   </defs>
 
   <!-- background -->
-  <rect width="800" height="678" fill="#0e1626" rx="12"/>
+  <rect width="760" height="832" fill="#0e1626" rx="14"/>
 
-  <!-- === ARROWS (drawn before boxes so boxes paint over endpoints) === -->
-
-  <!-- main vertical flow -->
-  <line x1="400" y1="60"  x2="400" y2="78"  stroke="#6b7a99" stroke-width="1.8" marker-end="url(#ah)"/>
-  <line x1="400" y1="153" x2="400" y2="175" stroke="#6b7a99" stroke-width="1.8" marker-end="url(#ah)"/>
-  <line x1="400" y1="253" x2="400" y2="274" stroke="#6b7a99" stroke-width="1.8" marker-end="url(#ah)"/>
-  <line x1="400" y1="337" x2="400" y2="358" stroke="#6b7a99" stroke-width="1.8" marker-end="url(#ah)"/>
-  <line x1="400" y1="433" x2="400" y2="454" stroke="#6b7a99" stroke-width="1.8" marker-end="url(#ah)"/>
-  <line x1="400" y1="502" x2="400" y2="523" stroke="#6b7a99" stroke-width="1.8" marker-end="url(#ah)"/>
-  <line x1="400" y1="601" x2="400" y2="619" stroke="#6b7a99" stroke-width="1.8" marker-end="url(#ah)"/>
-
-  <!-- Step 2 → deep loop box -->
-  <line x1="630" y1="214" x2="646" y2="214" stroke="rgba(139,120,230,0.6)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ahp)"/>
-  <!-- deep loop → back to Step 2 (curved) -->
-  <path d="M 717 175 Q 740 155 630 192" fill="none" stroke="rgba(139,120,230,0.45)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ahp)"/>
+  <!-- === ARROWS === -->
+  <line x1="380" y1="67"  x2="380" y2="90"  stroke="#6b7a99" stroke-width="2" marker-end="url(#ah)"/>
+  <line x1="380" y1="187" x2="380" y2="210" stroke="#6b7a99" stroke-width="2" marker-end="url(#ah)"/>
+  <line x1="380" y1="318" x2="380" y2="341" stroke="#6b7a99" stroke-width="2" marker-end="url(#ah)"/>
+  <line x1="380" y1="415" x2="380" y2="438" stroke="#6b7a99" stroke-width="2" marker-end="url(#ah)"/>
+  <line x1="380" y1="535" x2="380" y2="558" stroke="#6b7a99" stroke-width="2" marker-end="url(#ah)"/>
+  <line x1="380" y1="621" x2="380" y2="644" stroke="#6b7a99" stroke-width="2" marker-end="url(#ah)"/>
+  <line x1="380" y1="741" x2="380" y2="764" stroke="#6b7a99" stroke-width="2" marker-end="url(#ah)"/>
 
   <!-- === BOXES === -->
 
-  <!-- QUERY -->
-  <rect x="170" y="14" width="460" height="46" rx="10"
-        fill="rgba(233,238,247,0.07)" stroke="rgba(233,238,247,0.4)" stroke-width="1.5"/>
-  <text x="400" y="33" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="700" fill="#e9eef7">User Query</text>
-  <text x="400" y="50" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#95a4c2">natural language · any language (Greek + English supported)</text>
+  <!-- USER QUERY -->
+  <rect x="25" y="15" width="710" height="52" rx="11"
+        fill="rgba(233,238,247,0.07)" stroke="rgba(233,238,247,0.45)" stroke-width="1.8"/>
+  <text x="380" y="36" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="700" fill="#e9eef7">User Query</text>
+  <text x="380" y="56" text-anchor="middle" font-family="sans-serif" font-size="12.5" fill="#95a4c2">natural language · any language (Greek + English supported)</text>
 
-  <!-- STEP 1 — Claude -->
-  <rect x="170" y="80" width="460" height="73" rx="10"
-        fill="rgba(139,120,230,0.12)" stroke="#8b78e6" stroke-width="1.5"/>
-  <text x="400" y="96" text-anchor="middle" font-family="sans-serif" font-size="12.5" font-weight="700" fill="#c4b8f5">Step 1 — Query Understanding</text>
-  <line x1="182" y1="102" x2="618" y2="102" stroke="#8b78e6" stroke-opacity="0.35"/>
-  <text x="184" y="117" font-family="sans-serif" font-size="11" fill="#95a4c2">Claude → core_query + variants + subject_terms (JSON)</text>
-  <text x="184" y="132" font-family="sans-serif" font-size="10.5" fill="#95a4c2" font-style="italic">HyDE: generate hypothetical answer → richer embedding match</text>
-  <text x="184" y="146" font-family="sans-serif" font-size="10" fill="rgba(196,184,245,0.55)">claude -p subprocess · inherits existing subscription · no extra API key</text>
+  <!-- STEP 1 — Claude: Query Understanding -->
+  <rect x="25" y="92" width="710" height="95" rx="11"
+        fill="rgba(139,120,230,0.13)" stroke="#8b78e6" stroke-width="1.8"/>
+  <text x="380" y="111" text-anchor="middle" font-family="sans-serif" font-size="14.5" font-weight="700" fill="#c4b8f5">Step 1 — Query Understanding</text>
+  <line x1="37" y1="118" x2="723" y2="118" stroke="#8b78e6" stroke-opacity="0.35"/>
+  <text x="39" y="136" font-family="sans-serif" font-size="13" fill="#cbd5e9">Claude → core_query + variants + subject_terms (structured JSON)</text>
+  <text x="39" y="154" font-family="sans-serif" font-size="12.5" fill="#95a4c2" font-style="italic">HyDE: generate a hypothetical answer to bridge vocabulary gaps → richer embed match</text>
+  <text x="39" y="172" font-family="sans-serif" font-size="11.5" fill="rgba(196,184,245,0.6)">via claude -p subprocess · inherits existing subscription · no extra Anthropic API key needed</text>
 
-  <!-- STEP 2 — Cohere -->
-  <rect x="170" y="177" width="460" height="76" rx="10"
-        fill="rgba(232,124,62,0.12)" stroke="#e87c3e" stroke-width="1.5"/>
-  <text x="400" y="193" text-anchor="middle" font-family="sans-serif" font-size="12.5" font-weight="700" fill="#f4a77a">Step 2 — Hybrid Retrieval</text>
-  <line x1="182" y1="199" x2="618" y2="199" stroke="#e87c3e" stroke-opacity="0.35"/>
-  <text x="184" y="214" font-family="sans-serif" font-size="11" fill="#95a4c2">Cohere embed-multilingual-v3.0 → ChromaDB ~1M chunks → top 100 files</text>
-  <text x="184" y="229" font-family="sans-serif" font-size="10.5" fill="#95a4c2" font-style="italic">embed all variants + HyDE · MMR diversity filter across results</text>
-  <text x="184" y="244" font-family="sans-serif" font-size="10" fill="rgba(244,167,122,0.55)">optional [-deep]: read top results → extract new terms → re-run ×3  →</text>
-
-  <!-- STEP 2B — deep loop (dashed) -->
-  <rect x="648" y="177" width="138" height="76" rx="8"
-        fill="rgba(139,120,230,0.07)" stroke="#8b78e6" stroke-width="1.2" stroke-dasharray="5 3"/>
-  <text x="717" y="198" text-anchor="middle" font-family="sans-serif" font-size="10.5" font-weight="700" fill="#c4b8f5">[-deep]</text>
-  <text x="717" y="213" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#95a4c2">read top-10 results</text>
-  <text x="717" y="227" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#95a4c2">extract new terms</text>
-  <text x="717" y="241" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#95a4c2">re-run Step 2 ×3</text>
+  <!-- STEP 2 — Cohere: Hybrid Retrieval -->
+  <rect x="25" y="212" width="710" height="106" rx="11"
+        fill="rgba(232,124,62,0.13)" stroke="#e87c3e" stroke-width="1.8"/>
+  <text x="380" y="231" text-anchor="middle" font-family="sans-serif" font-size="14.5" font-weight="700" fill="#f4a77a">Step 2 — Hybrid Retrieval</text>
+  <line x1="37" y1="238" x2="723" y2="238" stroke="#e87c3e" stroke-opacity="0.35"/>
+  <text x="39" y="256" font-family="sans-serif" font-size="13" fill="#cbd5e9">Cohere embed-multilingual-v3.0 · embed all variants + HyDE → query ChromaDB (~1M chunks)</text>
+  <text x="39" y="274" font-family="sans-serif" font-size="13" fill="#cbd5e9">top 100 candidate files · MMR diversity filter applied across results</text>
+  <text x="39" y="292" font-family="sans-serif" font-size="12.5" fill="#95a4c2" font-style="italic">↳ [-deep] · read top results, extract new domain terms, re-run Step 2 up to ×3  (+1–2 min)</text>
+  <text x="39" y="309" font-family="sans-serif" font-size="11.5" fill="rgba(244,167,122,0.6)">Cohere API · free tier sufficient for queries · paid tier for bulk indexing (~$1.60/M chunks)</text>
 
   <!-- STEP 3 — Extraction -->
-  <rect x="170" y="276" width="460" height="61" rx="10"
-        fill="rgba(79,195,215,0.12)" stroke="#4fc3d7" stroke-width="1.5"/>
-  <text x="400" y="292" text-anchor="middle" font-family="sans-serif" font-size="12.5" font-weight="700" fill="#7fdce8">Step 3 — Text Extraction</text>
-  <line x1="182" y1="298" x2="618" y2="298" stroke="#4fc3d7" stroke-opacity="0.35"/>
-  <text x="184" y="313" font-family="sans-serif" font-size="11" fill="#95a4c2">pdftotext · antiword · openpyxl / xlrd · zipfile (docx/odt)</text>
-  <text x="184" y="328" font-family="sans-serif" font-size="10.5" fill="#95a4c2" font-style="italic">*.ocr.txt sidecars for scanned images · max 30 000 chars per file</text>
+  <rect x="25" y="343" width="710" height="72" rx="11"
+        fill="rgba(79,195,215,0.13)" stroke="#4fc3d7" stroke-width="1.8"/>
+  <text x="380" y="362" text-anchor="middle" font-family="sans-serif" font-size="14.5" font-weight="700" fill="#7fdce8">Step 3 — Text Extraction</text>
+  <line x1="37" y1="369" x2="723" y2="369" stroke="#4fc3d7" stroke-opacity="0.35"/>
+  <text x="39" y="387" font-family="sans-serif" font-size="13" fill="#cbd5e9">pdftotext (PDF) · antiword (doc) · openpyxl / xlrd (xlsx) · zipfile (docx/odt)</text>
+  <text x="39" y="405" font-family="sans-serif" font-size="12.5" fill="#95a4c2" font-style="italic">*.ocr.txt sidecars for scanned images · max 30 000 chars per file</text>
 
-  <!-- STEP 4 — Claude agents -->
-  <rect x="170" y="360" width="460" height="73" rx="10"
-        fill="rgba(139,120,230,0.12)" stroke="#8b78e6" stroke-width="1.5"/>
-  <text x="400" y="376" text-anchor="middle" font-family="sans-serif" font-size="12.5" font-weight="700" fill="#c4b8f5">Step 4 — Parallel Ranking</text>
-  <line x1="182" y1="382" x2="618" y2="382" stroke="#8b78e6" stroke-opacity="0.35"/>
-  <text x="184" y="397" font-family="sans-serif" font-size="11" fill="#95a4c2">10 Claude agents · 6 concurrent · score each file 0–10 for relevance</text>
-  <text x="184" y="412" font-family="sans-serif" font-size="10.5" fill="#95a4c2" font-style="italic">agents rank only — no answering yet · ThreadPoolExecutor · json_repair</text>
-  <text x="184" y="427" font-family="sans-serif" font-size="10" fill="rgba(196,184,245,0.55)">separates recall from synthesis → prevents citation hallucination</text>
+  <!-- STEP 4 — Claude: Parallel Ranking -->
+  <rect x="25" y="440" width="710" height="95" rx="11"
+        fill="rgba(139,120,230,0.13)" stroke="#8b78e6" stroke-width="1.8"/>
+  <text x="380" y="459" text-anchor="middle" font-family="sans-serif" font-size="14.5" font-weight="700" fill="#c4b8f5">Step 4 — Parallel Ranking</text>
+  <line x1="37" y1="466" x2="723" y2="466" stroke="#8b78e6" stroke-opacity="0.35"/>
+  <text x="39" y="484" font-family="sans-serif" font-size="13" fill="#cbd5e9">10 Claude agents · 6 concurrent workers · each scores 10 files on relevance (0–10)</text>
+  <text x="39" y="502" font-family="sans-serif" font-size="12.5" fill="#95a4c2" font-style="italic">agents rank only — they do NOT answer the question · ThreadPoolExecutor · json_repair</text>
+  <text x="39" y="520" font-family="sans-serif" font-size="11.5" fill="rgba(196,184,245,0.6)">separating recall from synthesis prevents citation hallucination in the final answer</text>
 
-  <!-- STEP 5 — Merge -->
-  <rect x="170" y="456" width="460" height="46" rx="10"
-        fill="rgba(90,112,144,0.15)" stroke="#5a7090" stroke-width="1.2"/>
-  <text x="400" y="474" text-anchor="middle" font-family="sans-serif" font-size="12.5" font-weight="700" fill="#e9eef7">Step 5 — Merge + Dedup → top 15</text>
-  <text x="400" y="492" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#95a4c2" font-style="italic">aggregate agent scores · stem dedup for email thread duplicates</text>
+  <!-- STEP 5 — Merge + Dedup -->
+  <rect x="25" y="560" width="710" height="61" rx="11"
+        fill="rgba(90,112,144,0.16)" stroke="#5a7090" stroke-width="1.4"/>
+  <text x="380" y="581" text-anchor="middle" font-family="sans-serif" font-size="14.5" font-weight="700" fill="#e9eef7">Step 5 — Merge + Dedup → top 15</text>
+  <text x="380" y="600" text-anchor="middle" font-family="sans-serif" font-size="12.5" fill="#95a4c2" font-style="italic">aggregate agent scores · stem dedup removes duplicates (common with email threads)</text>
 
-  <!-- STEP 6 — Final answer -->
-  <rect x="170" y="525" width="460" height="76" rx="10"
-        fill="rgba(139,120,230,0.17)" stroke="#8b78e6" stroke-width="2"/>
-  <text x="400" y="541" text-anchor="middle" font-family="sans-serif" font-size="12.5" font-weight="700" fill="#c4b8f5">Step 6 — Final Answer</text>
-  <line x1="182" y1="547" x2="618" y2="547" stroke="#8b78e6" stroke-opacity="0.35"/>
-  <text x="184" y="562" font-family="sans-serif" font-size="11" fill="#95a4c2">Claude reads full text of top 15 original files → cited answer</text>
-  <text x="184" y="577" font-family="sans-serif" font-size="10.5" fill="#95a4c2" font-style="italic">[filename] inline citations + SOURCES list · reads originals, not summaries</text>
-  <text x="184" y="592" font-family="sans-serif" font-size="10" fill="rgba(196,184,245,0.55)">~$0.15–0.20 (largest Claude call) · ~$0.20–0.40 total per run</text>
+  <!-- STEP 6 — Claude: Final Answer -->
+  <rect x="25" y="646" width="710" height="95" rx="11"
+        fill="rgba(139,120,230,0.18)" stroke="#8b78e6" stroke-width="2.2"/>
+  <text x="380" y="665" text-anchor="middle" font-family="sans-serif" font-size="14.5" font-weight="700" fill="#c4b8f5">Step 6 — Final Answer</text>
+  <line x1="37" y1="672" x2="723" y2="672" stroke="#8b78e6" stroke-opacity="0.4"/>
+  <text x="39" y="690" font-family="sans-serif" font-size="13" fill="#cbd5e9">Claude reads full text of top 15 original files → synthesises cited answer</text>
+  <text x="39" y="708" font-family="sans-serif" font-size="12.5" fill="#95a4c2" font-style="italic">[filename] inline citations + SOURCES list · reads originals, not summaries (prevents drift)</text>
+  <text x="39" y="726" font-family="sans-serif" font-size="11.5" fill="rgba(196,184,245,0.6)">Claude runs via subscription — no per-token billing · only Cohere API is billed (~$0.01–0.02/query)</text>
 
   <!-- OUTPUT -->
-  <rect x="170" y="621" width="460" height="44" rx="10"
-        fill="rgba(93,184,144,0.18)" stroke="#5db890" stroke-width="1.8"/>
-  <text x="400" y="639" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="700" fill="#5db890">Cited Answer</text>
-  <text x="400" y="656" text-anchor="middle" font-family="sans-serif" font-size="10.5" fill="#95a4c2">~4 min standard · ~6 min deep · source list with relevance scores</text>
+  <rect x="25" y="766" width="710" height="52" rx="11"
+        fill="rgba(93,184,144,0.2)" stroke="#5db890" stroke-width="2"/>
+  <text x="380" y="787" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="700" fill="#5db890">Cited Answer</text>
+  <text x="380" y="807" text-anchor="middle" font-family="sans-serif" font-size="12.5" fill="#95a4c2">~4 min standard · ~6 min deep · answer with [filename] references + relevance-ranked SOURCES</text>
 </svg>
