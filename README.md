@@ -25,7 +25,7 @@ dsearch-multimodel --model gte "my query"         # compare across 5 embedding m
 **Typical cost per answer run:** ~$0.01–0.02 (Cohere API only — Claude runs via your existing subscription, no per-token billing).  
 **Deep mode:** ~$0.02–0.04 (a few extra Cohere queries for the extra retrieval rounds).
 
-> **Interactive diagrams:** [`docs/architecture.html`](docs/architecture.html) — how the pipeline works (drag nodes, click for detail) · [`docs/setup.html`](docs/setup.html) — step-by-step setup guide with full commands
+> **Interactive diagrams:** [Architecture](https://gruncode.github.io/semantic-disk-search/architecture.html) — runtime pipeline (drag nodes, click for detail) · [Setup guide](https://gruncode.github.io/semantic-disk-search/setup.html) — step-by-step with full shell commands · [Full docs](https://gruncode.github.io/semantic-disk-search/)
 
 ---
 
