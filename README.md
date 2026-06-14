@@ -20,32 +20,7 @@ dsearch-multimodel --model gte "my query"         # compare across 5 embedding m
 
 ## How the answer pipeline works
 
-```
- Query (natural language, any language)
-     │
-     ▼
- Step 1 ─ Query Understanding          (Claude)
-           → core_query + variants + subject_terms
-           → HyDE: generates a hypothetical answer to bridge vocabulary gaps
-     │
-     ▼
- Step 2 ─ Hybrid Retrieval             (Cohere embed-v3 → ChromaDB, ~1M chunks)
-           → top 100 candidate files
-           ↳ [-deep] MMR-diverse sample → extract new terms → re-search × 3
-     │
-     ▼
- Step 3 ─ Text Extraction              (pdftotext / antiword / openpyxl / OCR)
-     │
-     ▼
- Step 4 ─ Parallel Ranking             (10 Claude agents, 6 concurrent workers)
-           → each agent scores 10 files on relevance (0–10, no answering yet)
-     │
-     ▼
- Step 5 ─ Merge + Dedup               → top 15 files by aggregate agent score
-     │
-     ▼
- Step 6 ─ Final Answer                (Claude reads original files → cited answer)
-```
+![Pipeline](docs/pipeline.svg)
 
 **Typical cost per answer run:** ~$0.20–0.40 (Claude API + Cohere API).  
 **Deep mode:** ~$0.30–0.60.
