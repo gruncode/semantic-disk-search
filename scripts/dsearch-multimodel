@@ -1,0 +1,54 @@
+#!/bin/bash
+# dsearch-multimodel — Multi-model FAISS semantic search (personal document corpus)
+# Models: cohere-v3, gte, e5-base, e5-large, bge-m3
+# Load API keys
+set -a; source ~/.config/dsearch/.env 2>/dev/null; set +a
+# Usage: dsearch-multimodel query words here
+#        dsearch-multimodel --model gte|e5|cohere|bge-m3|e5-large query words
+MODEL="cohere-v3"
+TOP=10
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --model) shift; case "$1" in gte) MODEL="gte";; e5) MODEL="e5-base";; cohere) MODEL="cohere-v3";; *) MODEL="$1";; esac; shift;;
+        --top)   shift; TOP="$1"; shift;;
+        *)       break;;
+    esac
+done
+QUERY="$*"
+[ -z "$QUERY" ] && read -p "Query: " QUERY
+
+$VENV_GTE -c "
+import sys, json, numpy as np, faiss
+
+model_key = sys.argv[1]
+query = sys.argv[2]
+faiss_dir = f'$FAISS_BASE/{model_key}'
+index = faiss.read_index(f'{faiss_dir}/index.faiss')
+meta = json.load(open(f'{faiss_dir}/metadata.json'))
+paths = meta['doc_paths']
+cids = meta['chunk_doc_ids']
+
+if 'cohere' in model_key:
+    import cohere, os
+    co = cohere.ClientV2(api_key=os.environ.get('COHERE_API_KEY',''))
+    resp = co.embed(texts=[query], model='embed-multilingual-v3.0', input_type='search_query', embedding_types=['float'])
+    qvec = np.array(resp.embeddings.float_, dtype=np.float32)
+else:
+    from sentence_transformers import SentenceTransformer
+    mname = meta['model']
+    m = SentenceTransformer(mname, trust_remote_code=True)
+    qvec = m.encode([query], normalize_embeddings=True).astype(np.float32)
+
+top_k = int(sys.argv[3])
+scores, indices = index.search(qvec, top_k * 3)
+seen = set()
+rank = 0
+for score, idx in zip(scores[0], indices[0]):
+    p = paths[cids[idx]]
+    if p not in seen:
+        seen.add(p)
+        rank += 1
+        print(f'{rank}. [{score:.4f}] {p}')
+        if rank >= top_k:
+            break
+" "$MODEL" "$QUERY" "$TOP" 2>/dev/null

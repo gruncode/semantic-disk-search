@@ -1,0 +1,376 @@
+#!/bin/bash
+# ================================================================================
+# dsearch — Full-disk semantic search CLI
+# ================================================================================
+#
+# PURPOSE
+#   Entry point for semantic search across ~/DATA. Routes to one of 3 modes:
+#     - Terminal mode (default)        — colored text output, quick ranked list
+#     - HTML mode (-w)                 — sortable/filterable HTML table in browser
+#     - Answer mode (-CLexpand-...)    — full 6-step pipeline → cited answer
+#
+# INPUTS
+#   Command-line flags (see usage() below) + positional query words
+#
+# OUTPUTS
+#   Terminal mode: colored rows to stdout (score, path, snippet)
+#   HTML mode:     /tmp/dsearch_results.html, opened via xdg-open
+#   Answer mode:   delegates to dsearch-answer (which prints ANSWER + SOURCES)
+#
+# RESOURCES
+#   ~/.config/dsearch/.env                 — COHERE_API_KEY (loaded at startup)
+#   $CHROMADB_DIR — ChromaDB persistent collection 'fulldisk'
+#   $VENV_GTE/ — Python venv (has cohere + chromadb libs)
+#
+# RELATED FILES
+#   dsearch-answer              — Full CLexpand→CLrank→CLanswer pipeline (6 steps)
+#   extract_chunks.py           — Builds ChromaDB from disk files (one-time indexing)
+#   docs/index.html             — Diagram, clickable links back to dsearch-answer
+# ================================================================================
+
+# Load API keys from ~/.config/dsearch/.env into environment
+# set -a: auto-export all variables that get defined
+# 2>/dev/null: silently skip if file missing (keys may be in shell already)
+set -a; source ~/.config/dsearch/.env 2>/dev/null; set +a
+
+usage() {
+    cat <<'EOF'
+dsearch — full-disk semantic search (Cohere embed-v3 + ChromaDB, 941K chunks)
+
+Usage: dsearch [-n NUM] [-w] [-CLexpand-CLrank-CLanswer] query words
+
+Options:
+  -n NUM   Number of results (default: 50)
+  -w       Open results as sortable HTML table in browser
+           (sort by column, filter, group by folder, query highlights)
+  -CLexpand-CLrank-CLanswer
+           Answer mode: understand query → 100 files → 10 parallel Claude agents
+           rank files → final Claude reads top 15 originals → answer (~3-4 min)
+  -deep    Deep mode (with -CLexpand-CLrank-CLanswer): multi-hop retrieval loop
+           reads results, extracts new terms, searches again (max 3 loops, +1-2 min)
+  -h       Show this help
+
+Examples:
+  dsearch zoneminder camera setup
+  dsearch -n 20 300045268
+  dsearch -w -n 100 invoice pdf
+  dsearch -CLexpand-CLrank-CLanswer find all documents about project delays
+  dsearch -CLexpand-CLrank-CLanswer -deep deep search for project timeline documents
+EOF
+    exit 0
+}
+
+# ── Arg parsing ──────────────────────────────────────────────
+NRESULTS=50           # Default: 50 results for quick browsing
+WEBMODE=0             # -w flag → HTML output
+ANSWERMODE=0          # -CLexpand-CLrank-CLanswer → delegate to dsearch-answer
+DEEPMODE=""           # -deep (only meaningful with ANSWERMODE)
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help) usage ;;
+        -n) NRESULTS="$2"; shift 2 ;;
+        -w) WEBMODE=1; shift ;;
+        # Answer mode forces NRESULTS=100 (pipeline needs 100 files for 10×10 agents)
+        -CLexpand-CLrank-CLanswer) ANSWERMODE=1; NRESULTS=100; shift ;;
+        -deep) DEEPMODE="-deep"; shift ;;
+        *) break ;;     # First non-flag arg → query starts here
+    esac
+done
+QUERY="$*"              # Join remaining args as the query string
+# Interactive fallback if no query given (useful when running dsearch with no args)
+[ -z "$QUERY" ] && read -p "Query: " QUERY
+
+# ── Mode dispatch ────────────────────────────────────────────
+if [ "$ANSWERMODE" = "1" ]; then
+    # ── Answer mode: hand off to dsearch-answer (6-step pipeline) ──
+    # exec replaces this shell process with Python (no wrapper overhead)
+    exec $VENV_GTE /usr/local/bin/dsearch-answer $DEEPMODE "$QUERY" "$NRESULTS"
+elif [ "$WEBMODE" = "1" ]; then
+    # ── HTML mode: generate sortable/filterable table, open in browser ──
+    # Pass query/n via env vars (cleaner than argv for strings with special chars)
+    export DSEARCH_QUERY="$QUERY"
+    export DSEARCH_N="$NRESULTS"
+    $VENV_GTE << 'PYEOF'
+# HTML mode embedded Python — builds a self-contained single-file HTML report.
+# Reads query from env, embeds with Cohere, queries ChromaDB, emits sortable table.
+import os, re, html as h, time, cohere, chromadb
+
+q = os.environ['DSEARCH_QUERY']
+n = int(os.environ['DSEARCH_N'])
+
+# Single-query Cohere embed (async version in dsearch-answer handles batch)
+co = cohere.ClientV2(api_key=os.environ['COHERE_API_KEY'])
+resp = co.embed(texts=[q], model='embed-multilingual-v3.0',
+                input_type='search_query', embedding_types=['float'])
+
+# ChromaDB: 941K chunks indexed from ~/DATA (built by extract_chunks.py)
+col = chromadb.PersistentClient(
+    path='$CHROMADB_DIR').get_collection('fulldisk')
+results = col.query(query_embeddings=resp.embeddings.float_, n_results=n)
+
+# Build a word-level highlight regex.
+# Filter 3+ chars: avoids highlighting "a", "of", "το" etc. (too noisy)
+# \b word boundaries work with Greek since Python's re module is Unicode-aware
+words = [w for w in q.split() if len(w) > 2]
+pat = re.compile(r'\b(' + '|'.join(re.escape(w) for w in words) + r')\b',
+                 re.IGNORECASE) if words else None
+
+def hl(text):
+    """HTML-escape then wrap query words in <span class="hl"> for yellow highlight."""
+    text = h.escape(text)
+    if pat:
+        text = pat.sub(r'<span class="hl">\1</span>', text)
+    return text
+
+def score_cls(s):
+    """Map score 0-1 to CSS class for color coding.
+       sh=green high >=0.6, sm=yellow mid >=0.5, sl=red low <0.5"""
+    if s >= 0.6: return 'sh'
+    if s >= 0.5: return 'sm'
+    return 'sl'
+
+def fmt_date(ts):
+    try:
+        return time.strftime('%Y-%m-%d', time.localtime(int(ts)))
+    except:
+        return '—'
+
+# Build one <tr> per result. data-val attributes hold sortable values
+# (e.g. raw score/timestamp) so JS sort doesn't have to re-parse the display text.
+rows = []
+for i, (doc, meta, dist) in enumerate(zip(
+        results['documents'][0], results['metadatas'][0],
+        results['distances'][0])):
+    score = 1 - dist                          # Cosine distance → similarity
+    path = meta['path']
+    dirn = os.path.dirname(path)              # Parent folder (full path)
+    fname = os.path.basename(path)
+    ext = meta.get('ext', '')                 # File extension (without dot)
+    cat = meta.get('folder', '')              # Top-level category (DATA/Finance, etc)
+    mdate = fmt_date(meta.get('mtime', '0'))  # Human-readable modification date
+    mts = meta.get('mtime', '0')              # Raw epoch seconds (for sorting)
+    cidx = meta.get('chunk_idx', 0)           # Which chunk of the file matched
+    ctot = meta.get('total_chunks', 1)        # Total chunks in that file
+    snippet = doc[:250]                       # First 250 chars of matching chunk
+    rows.append(f'''<tr>
+  <td class="c" data-val="{i+1}">{i+1}</td>
+  <td class="c {score_cls(score)}" data-val="{score:.4f}">{score:.3f}</td>
+  <td class="cat">{h.escape(cat)}</td>
+  <td class="folder" data-val="{h.escape(dirn)}"><a href="file://{h.escape(dirn)}">{hl(dirn)}</a></td>
+  <td class="fname"><a href="file://{h.escape(path)}">{hl(fname)}</a></td>
+  <td class="ext">{h.escape(ext)}</td>
+  <td class="c" data-val="{mts}">{mdate}</td>
+  <td class="c chunk">{cidx}/{ctot}</td>
+  <td class="snip" title="{h.escape(doc[:300])}">{hl(snippet)}</td>
+</tr>''')
+
+# Assemble the final HTML page (single file, no external deps).
+# Colors: Catppuccin Mocha palette (dark mode)
+# Layout: sticky header, sortable columns, live filter, group-by-folder toggle
+page = f'''<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>dsearch: {h.escape(q)}</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{background:#1e1e2e;color:#cdd6f4;font-family:'Segoe UI',system-ui,sans-serif;padding:16px 20px}}
+h1{{color:#89b4fa;font-size:1.3em;margin-bottom:4px}}
+.meta{{color:#6c7086;font-size:.85em;margin-bottom:12px}}
+.bar{{display:flex;gap:10px;margin-bottom:12px;align-items:center}}
+.filter{{flex:1;padding:7px 12px;background:#313244;border:1px solid #45475a;color:#cdd6f4;border-radius:6px;font-size:.9em}}
+.filter:focus{{outline:none;border-color:#89b4fa}}
+.btn{{padding:7px 14px;background:#313244;border:1px solid #45475a;color:#cdd6f4;border-radius:6px;cursor:pointer;font-size:.85em}}
+.btn:hover{{background:#45475a}}
+.btn.active{{background:#89b4fa;color:#1e1e2e;border-color:#89b4fa}}
+table{{width:100%;border-collapse:collapse;table-layout:fixed}}
+th{{background:#313244;color:#89b4fa;padding:8px 10px;cursor:pointer;user-select:none;text-align:left;position:sticky;top:0;font-size:.82em;white-space:nowrap}}
+th:hover{{background:#45475a}}
+.ar{{margin-left:4px;font-size:.7em}}
+td{{padding:5px 10px;border-bottom:1px solid #2a2a3c;font-size:.82em;vertical-align:top;overflow:hidden;text-overflow:ellipsis}}
+tr:hover{{background:#313244}}
+.c{{text-align:center}}
+.sh{{color:#a6e3a1;font-weight:bold}}
+.sm{{color:#f9e2af}}
+.sl{{color:#f38ba8}}
+.cat{{color:#f5c2e7;font-size:.78em}}
+.folder{{color:#89b4fa;word-break:break-all}}
+.fname{{color:#cba6f7;font-weight:bold;word-break:break-all}}
+.ext{{color:#94e2d5;text-align:center;font-size:.78em}}
+.chunk{{color:#6c7086;font-size:.75em}}
+.snip{{color:#a6adc8;font-size:.78em}}
+/* .hl = yellow highlight for query words (server-side, always on) */
+.hl{{background:#f9e2af30;color:#f9e2af;font-weight:bold;padding:0 2px;border-radius:2px}}
+/* .fhl = blue highlight for filter matches (client-side, added live by filter JS) */
+.fhl{{background:#89b4fa40;color:#89b4fa;font-weight:bold;padding:0 2px;border-radius:2px}}
+a{{color:inherit;text-decoration:none}}
+a:hover{{text-decoration:underline}}
+col.c1{{width:34px}}col.c2{{width:52px}}col.c3{{width:70px}}col.c4{{width:28%}}col.c5{{width:15%}}col.c6{{width:42px}}col.c7{{width:76px}}col.c8{{width:48px}}
+.hidden{{display:none}}
+</style></head><body>
+<h1>dsearch: {h.escape(q)}</h1>
+<div class="meta">{len(rows)} results &middot; Cohere embed-v3 + ChromaDB</div>
+<div class="bar">
+  <input class="filter" type="text" placeholder="Filter by path or content..." id="f">
+  <button class="btn" id="gf">Group by folder</button>
+</div>
+<table id="t">
+<colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col class="c5"><col class="c6"><col class="c7"><col class="c8"><col></colgroup>
+<thead><tr>
+  <th data-c="0">#<span class="ar"></span></th>
+  <th data-c="1">Score<span class="ar"></span></th>
+  <th data-c="2">Category<span class="ar"></span></th>
+  <th data-c="3">Folder<span class="ar"></span></th>
+  <th data-c="4">File<span class="ar"></span></th>
+  <th data-c="5">Ext<span class="ar"></span></th>
+  <th data-c="6">Modified<span class="ar"></span></th>
+  <th data-c="7">Chunk<span class="ar"></span></th>
+  <th data-c="8">Snippet<span class="ar"></span></th>
+</tr></thead>
+<tbody>
+{"".join(rows)}
+</tbody></table>
+<script>
+// ── Client-side interactivity ──
+// Three features: (1) sort by column click, (2) live filter with highlight, (3) group-by-folder
+const tb=document.querySelector('#t tbody'),ths=document.querySelectorAll('th');
+let sc=-1,asc=true;  // sc=current sort column index, asc=direction toggle
+
+// Feature 1: click column header to sort. Click same col twice → reverse direction.
+ths.forEach(th=>th.addEventListener('click',()=>{{
+  const c=+th.dataset.c;
+  if(sc===c)asc=!asc;else{{sc=c;asc=true}}
+  ths.forEach(h=>h.querySelector('.ar').textContent='');
+  th.querySelector('.ar').textContent=asc?'\\u25B2':'\\u25BC';
+  const rs=[...tb.querySelectorAll('tr')];
+  rs.sort((a,b)=>{{
+    let av=a.cells[c].dataset.val||a.cells[c].textContent;
+    let bv=b.cells[c].dataset.val||b.cells[c].textContent;
+    if(c<=1||c===6){{av=parseFloat(av);bv=parseFloat(bv)}}
+    return av<bv?(asc?-1:1):av>bv?(asc?1:-1):0;
+  }});
+  rs.forEach(r=>tb.appendChild(r));
+}}));
+// Feature 2: live filter with match highlighting.
+// We mutate innerHTML to wrap matches in <span class="fhl">, so we need to
+// remember the ORIGINAL HTML to restore on each keystroke.
+tb.querySelectorAll('tr').forEach(r=>{{
+  [...r.cells].forEach(c=>{{ if(!c.dataset.orig) c.dataset.orig=c.innerHTML; }});
+}});
+document.getElementById('f').addEventListener('input',e=>{{
+  const q=e.target.value.trim();
+  const ql=q.toLowerCase();
+  tb.querySelectorAll('tr').forEach(r=>{{
+    // Restore original HTML first
+    [...r.cells].forEach(c=>{{ if(c.dataset.orig) c.innerHTML=c.dataset.orig; }});
+    if(!q){{
+      r.classList.remove('hidden');
+      return;
+    }}
+    const visible = r.textContent.toLowerCase().includes(ql);
+    r.classList.toggle('hidden', !visible);
+    // Highlight matches in visible rows
+    if(visible){{
+      const re = new RegExp('('+q.replace(/[.*+?^$\\{{}}()|[\]\\\\]/g,'\\\\$&')+')','gi');
+      [...r.cells].forEach(c=>{{
+        // Walk text nodes only, skip inside tags
+        const walker = document.createTreeWalker(c, NodeFilter.SHOW_TEXT, null);
+        const nodes = [];
+        let n;
+        while(n = walker.nextNode()) nodes.push(n);
+        nodes.forEach(node=>{{
+          if(re.test(node.textContent)){{
+            const span = document.createElement('span');
+            span.innerHTML = node.textContent.replace(re,'<span class="fhl">$1</span>');
+            node.parentNode.replaceChild(span, node);
+          }}
+        }});
+      }});
+    }}
+  }});
+}});
+// Feature 3: "Group by folder" toggle. Sorts by folder column, greys out duplicate
+// folder cells (visual grouping without collapsing rows).
+let grouped=false;
+document.getElementById('gf').addEventListener('click',function(){{
+  grouped=!grouped;
+  this.classList.toggle('active',grouped);
+  if(grouped){{
+    sc=3;asc=true;
+    ths[3].querySelector('.ar').textContent='\\u25B2';
+    const rs=[...tb.querySelectorAll('tr')];
+    rs.sort((a,b)=>{{
+      const av=a.cells[3].dataset.val,bv=b.cells[3].dataset.val;
+      return av<bv?-1:av>bv?1:0;
+    }});
+    rs.forEach(r=>tb.appendChild(r));
+    let prev='';
+    rs.forEach(r=>{{
+      const f=r.cells[3].dataset.val;
+      if(f===prev)r.cells[3].style.color='#45475a';
+      else r.cells[3].style.color='';
+      prev=f;
+    }});
+  }}else{{
+    tb.querySelectorAll('tr').forEach(r=>r.cells[3].style.color='');
+    sc=0;asc=true;
+    ths[0].querySelector('.ar').textContent='\\u25B2';
+    const rs=[...tb.querySelectorAll('tr')];
+    rs.sort((a,b)=>+a.cells[0].dataset.val - +b.cells[0].dataset.val);
+    rs.forEach(r=>tb.appendChild(r));
+  }}
+}});
+</script></body></html>'''
+
+with open('/tmp/dsearch_results.html', 'w') as f:
+    f.write(page)
+print(f'Wrote {len(rows)} results to /tmp/dsearch_results.html')
+PYEOF
+    # Launch browser in background — lets the shell return immediately
+    xdg-open /tmp/dsearch_results.html 2>/dev/null &
+else
+    # ── Terminal color mode (default — no flags) ─────────────────
+    # Runs Python inline via -c. Uses ANSI color codes for terminal output.
+    $VENV_GTE -c "
+import sys, os, re, cohere, chromadb
+
+# Same embed + query path as HTML mode, just simpler output
+q = sys.argv[1]
+n = int(sys.argv[2])
+co = cohere.ClientV2(api_key=os.environ['COHERE_API_KEY'])
+resp = co.embed(texts=[q], model='embed-multilingual-v3.0', input_type='search_query', embedding_types=['float'])
+col = chromadb.PersistentClient(path='$CHROMADB_DIR').get_collection('fulldisk')
+results = col.query(query_embeddings=resp.embeddings.float_, n_results=n)
+
+# ANSI escape codes for terminal colors
+RST = '\033[0m'   # Reset all formatting
+BOLD = '\033[1m'
+DIM = '\033[2m'
+RED = '\033[31m'  # Low score (<0.5)
+GRN = '\033[32m'  # High score (>=0.6)
+YLW = '\033[33m'  # Medium score (>=0.5)
+BLU = '\033[34m'  # Paths
+BYLW = '\033[1;33m'  # bold yellow — used to highlight query matches in snippets
+
+# Build regex for query-word highlighting in snippets (word-boundary aware for Greek)
+words = [w for w in q.split() if len(w) > 2]
+pat = re.compile(r'\b(' + '|'.join(re.escape(w) for w in words) + r')\b', re.IGNORECASE) if words else None
+
+import time as _t
+for i, (doc, meta, dist) in enumerate(zip(results['documents'][0], results['metadatas'][0], results['distances'][0])):
+    score = 1 - dist
+    sc = GRN if score >= 0.6 else (YLW if score >= 0.5 else RED)
+    ext = meta.get('ext', '')
+    cat = meta.get('folder', '')
+    cidx = meta.get('chunk_idx', 0)
+    ctot = meta.get('total_chunks', 1)
+    try: mdate = _t.strftime('%Y-%m-%d', _t.localtime(int(meta.get('mtime','0'))))
+    except: mdate = '?'
+    tag = f'{DIM}[{cat}] {ext} {mdate} chunk {cidx}/{ctot}{RST}'
+    print(f'{BOLD}{i+1}.{RST} {sc}[{score:.3f}]{RST} {BLU}{meta[\"path\"]}{RST}')
+    print(f'   {tag}')
+    snippet = doc[:200]
+    if pat:
+        snippet = pat.sub(lambda m: f'{BYLW}{m.group()}{RST}{DIM}', snippet)
+    print(f'   {DIM}{snippet}{RST}')
+    print()
+" "$QUERY" "$NRESULTS" 2>/dev/null
+fi

@@ -1,0 +1,418 @@
+# semantic-disk-search
+
+Hybrid semantic search for a local document corpus. Combines **BM25** (Recoll/Xapian), **vector search** across 5 embedding models (FAISS + ChromaDB), **HyDE** query expansion, and **Claude agents** for ranked, cited answers.
+
+Tested on a 144 GB corpus of ~63 000 personal documents — PDFs, Word files, spreadsheets, scanned images (with OCR), emails, and plain text, including multilingual (Greek + English) content.
+
+---
+
+## What it does
+
+```
+dsearch "contract deadline extension"              # fast terminal results
+dsearch -w "invoice Q3"                           # sortable HTML table in browser
+dsearch -CLexpand-CLrank-CLanswer "my query"      # full AI answer with citations (~4 min)
+dsearch -CLexpand-CLrank-CLanswer -deep "query"   # deep multi-hop retrieval (~7 min)
+dsearch-multimodel --model gte "my query"         # compare across 5 embedding models
+```
+
+---
+
+## How the answer pipeline works
+
+```
+ Query (natural language, any language)
+     │
+     ▼
+ Step 1 ─ Query Understanding          (Claude)
+           → core_query + variants + subject_terms
+           → HyDE: generates a hypothetical answer to bridge vocabulary gaps
+     │
+     ▼
+ Step 2 ─ Hybrid Retrieval             (Cohere embed-v3 → ChromaDB, ~1M chunks)
+           → top 100 candidate files
+           ↳ [-deep] MMR-diverse sample → extract new terms → re-search × 3
+     │
+     ▼
+ Step 3 ─ Text Extraction              (pdftotext / antiword / openpyxl / OCR)
+     │
+     ▼
+ Step 4 ─ Parallel Ranking             (10 Claude agents, 6 concurrent workers)
+           → each agent scores 10 files on relevance (0–10, no answering yet)
+     │
+     ▼
+ Step 5 ─ Merge + Dedup               → top 15 files by aggregate agent score
+     │
+     ▼
+ Step 6 ─ Final Answer                (Claude reads original files → cited answer)
+```
+
+**Typical cost per answer run:** ~$0.20–0.40 (Claude API + Cohere API).  
+**Deep mode:** ~$0.30–0.60.
+
+> **Interactive diagrams:** [`docs/architecture.html`](docs/architecture.html) — how the pipeline works (drag nodes, click for detail) · [`docs/setup.html`](docs/setup.html) — step-by-step setup guide with full commands
+
+---
+
+## Embedding models
+
+Five models are indexed. `dsearch-multimodel` can search any of them independently for comparison.
+
+| Key | Model | Dim | Notes |
+|---|---|---|---|
+| `cohere-v3` ★ | `cohere/embed-multilingual-v3.0` | 1024 | Best multilingual precision; default for `dsearch` |
+| `e5-base` | `intfloat/multilingual-e5-base` | 768 | Good retrieval asymmetry for long docs |
+| `e5-large` | `intfloat/multilingual-e5-large` | 1024 | Broadest coverage for legal/procedural text |
+| `gte` | `Alibaba-NLP/gte-multilingual-base` | 768 | Sharpest score distribution; 8 K context |
+| `bge-m3` | `BAAI/bge-m3` | 1024 | Strong MTEB benchmarks; slower on short queries |
+
+★ = default
+
+---
+
+## Prerequisites
+
+**System packages**
+
+```bash
+# Debian/Ubuntu
+sudo apt install python3 python3-venv python3-pip \
+    recoll recollindex \
+    poppler-utils antiword libreoffice-common
+```
+
+- **Recoll** — BM25 full-text indexer (provides `recollindex` + `recollq`)
+- **poppler-utils** — `pdftotext` for PDF extraction
+- **antiword** — `.doc` (legacy Word) extraction
+- **LibreOffice** — `.docx`/`.odt` fallback extraction
+
+**Claude CLI** — the answer pipeline spawns Claude via subprocess:
+
+```bash
+npm install -g @anthropic-ai/claude-code   # or follow https://claude.ai/code
+claude --version                            # verify it works
+```
+
+**API keys**
+
+- [Cohere API key](https://dashboard.cohere.com/) — free tier works for queries; paid needed for large index builds
+- Anthropic subscription for Claude CLI (used by `dsearch-answer`)
+
+---
+
+## Installation
+
+### 1. Clone
+
+```bash
+git clone https://github.com/gruncode/semantic-disk-search.git
+cd semantic-disk-search
+```
+
+### 2. Create Python venvs
+
+Two venvs are required because GTE needs `transformers<=4.49` while other models need newer versions.
+
+```bash
+# Venv 1 — used by dsearch CLI, Cohere, ChromaDB, GTE model
+python3 -m venv ~/venvs/gte-embed
+~/venvs/gte-embed/bin/pip install \
+    cohere chromadb faiss-cpu numpy \
+    "transformers==4.49" torch \
+    sentence-transformers \
+    json-repair regex \
+    openpyxl xlrd python-pptx
+
+# Venv 2 — used by e5, bge-m3, Jupyter notebooks
+python3 -m venv ~/venvs/transformers
+~/venvs/transformers/bin/pip install \
+    faiss-cpu numpy sentence-transformers \
+    "transformers>=5.0" torch jupyter
+```
+
+### 3. Configure paths
+
+```bash
+mkdir -p ~/.config/dsearch
+cp .env.example ~/.config/dsearch/.env
+$EDITOR ~/.config/dsearch/.env
+```
+
+Fill in at minimum:
+
+```bash
+COHERE_API_KEY=your-key-here
+CORPUS_DIR=~/Documents            # root of what you want to search
+FAISS_BASE=~/.local/share/dsearch/faiss
+CHROMADB_DIR=~/.local/share/dsearch/chromadb
+XAPIAN_DB=~/.local/share/dsearch/xapiandb
+VENV_GTE=~/venvs/gte-embed/bin/python3
+VENV_TF=~/venvs/transformers/bin/python3
+HF_HOME=~/.cache/huggingface
+```
+
+### 4. Install CLI scripts
+
+```bash
+sudo cp scripts/dsearch scripts/dsearch-answer scripts/dsearch-multimodel /usr/local/bin/
+sudo chmod +x /usr/local/bin/dsearch /usr/local/bin/dsearch-answer /usr/local/bin/dsearch-multimodel
+```
+
+---
+
+## Indexing your corpus
+
+You need to build two indexes: a **BM25 index** (Recoll) and a **vector index** (ChromaDB or FAISS). Both read from `$CORPUS_DIR`.
+
+### BM25 index (Recoll)
+
+```bash
+# Configure Recoll to index your corpus
+mkdir -p ~/.recoll
+echo "topdirs = $HOME/Documents" >> ~/.recoll/recoll.conf
+
+# Run the indexer (takes 30 min – several hours depending on corpus size)
+make recoll-reindex
+
+# Check progress
+tail -f /tmp/recoll-reindex.log
+```
+
+### Vector index — ChromaDB (Cohere, recommended)
+
+This is what `dsearch` uses by default. Costs ~$1.60 per million chunks via the Cohere API.
+
+```bash
+# Step 1: extract text chunks from all files → chunks.jsonl
+$VENV_GTE src/extract_chunks.py $CORPUS_DIR \
+    --output /tmp/chunks.jsonl \
+    --chunk-size 500 --overlap 100
+
+# Step 2: embed with Cohere → embeddings.npy
+set -a && source ~/.config/dsearch/.env && set +a
+$VENV_GTE scripts/cohere_embed.py \
+    --chunks /tmp/chunks.jsonl \
+    --output /tmp/embeddings.npy
+
+# Step 3: load into ChromaDB
+$VENV_GTE scripts/build_chroma_from_embeddings.py \
+    --chunks /tmp/chunks.jsonl \
+    --embeddings /tmp/embeddings.npy \
+    --db $CHROMADB_DIR --collection fulldisk
+```
+
+### Vector index — FAISS (local models, free)
+
+```bash
+# GTE model (~6.5 h on CPU for a large corpus)
+make rebuild-gte
+
+# E5-base
+make rebuild-e5
+```
+
+---
+
+## Usage
+
+### Terminal search (fast)
+
+```bash
+dsearch "pension fund certificate"
+dsearch -n 20 "water leak insurance claim"    # top 20 results
+```
+
+Output: colour-coded ranked list (green = high score, yellow = medium, red = low) with file path, type, date, and a snippet with query words highlighted.
+
+### HTML table
+
+```bash
+dsearch -w "building permit extension"
+```
+
+Opens a sortable, filterable table in your browser. Click any column header to sort. Filter box matches across all columns. "Group by folder" clusters results from the same directory.
+
+### AI answer with citations
+
+```bash
+dsearch -CLexpand-CLrank-CLanswer "why was the project delivery delayed"
+```
+
+Runs the full 6-step pipeline. Prints timestamped progress for each step, then a cited answer like:
+
+```
+ANSWER:
+The project was delayed for three reasons:
+1. Supplier lead time exceeded the contract deadline by 6 weeks [delivery-timeline.pdf]
+2. Site access was restricted due to permit issues [permit-correspondence.docx]
+3. ...
+
+SOURCES:
+  [1] ~/Documents/Projects/delivery-timeline.pdf  (score 9.2)
+  [2] ~/Documents/Legal/permit-correspondence.docx (score 8.7)
+  ...
+```
+
+### Deep multi-hop search
+
+```bash
+dsearch -CLexpand-CLrank-CLanswer -deep "comprehensive review of Siemens proposal"
+```
+
+After the initial retrieval, Claude reads the top results, extracts new domain-specific terms, and runs up to 3 additional search rounds. Adds ~1–2 minutes but substantially improves recall on vocabulary-mismatch queries.
+
+### Compare embedding models
+
+```bash
+dsearch-multimodel "pump maintenance schedule"               # default: cohere-v3
+dsearch-multimodel --model gte "pump maintenance schedule"
+dsearch-multimodel --model e5  "pump maintenance schedule"
+```
+
+---
+
+## Makefile targets
+
+```
+make search Q="query"         quick Cohere search
+make search-gte Q="query"     search with GTE model
+make rebuild-gte              rebuild GTE FAISS index (~6.5h CPU)
+make rebuild-e5               rebuild e5-base FAISS index
+make rebuild-cohere           rebuild Cohere ChromaDB index (API cost)
+make benchmark                run evaluation against golden query set
+make recoll-reindex           full BM25 reindex (background)
+make recoll-status            show index sizes
+make jupyter                  launch Jupyter notebook server
+make status                   show all index sizes and doc counts
+make help                     list all targets
+```
+
+---
+
+## Project layout
+
+```
+scripts/
+  dsearch              main CLI — terminal, HTML, and answer modes
+  dsearch-answer       6-step AI answer pipeline (called by dsearch)
+  dsearch-multimodel   FAISS search across any of the 5 models
+  cohere_embed.py      batch embed chunks via Cohere API
+  build_chroma_from_embeddings.py  load embeddings into ChromaDB
+
+src/
+  extract_chunks.py    parse corpus files → text chunks (one-time)
+  multi_search.py      merge + dedup results from multiple models
+  recoll_vector_index.py  build FAISS from Recoll Xapian text
+  chroma_vector_index.py  ChromaDB index builder
+  recoll_query_assist.py  BM25-only path (legacy, no vector)
+  recoll_benchmark.py     evaluation harness (MRR, hit@k)
+
+configs/
+  models.yaml          model names, dimensions, index paths
+  alias_map.json       bilingual query alias expansion table
+
+docs/
+  index.html           interactive architecture diagrams
+  flow/dsearch.html    dsearch script flow diagram
+  flow/dsearch-answer.html  answer pipeline flow diagram
+  recoll_experiments.md    BM25 tuning experiment log
+  PROJECT-REPORT.md    full project report with benchmark results
+
+notebooks/
+  01_model_comparison.ipynb   5-model benchmark comparison + charts
+  02_experiment_log.ipynb     retrieval experiment history
+  03_pipeline_overview.ipynb  pipeline architecture walkthrough
+
+tests/
+  test_dsearch2_smoke.py       basic CLI smoke tests
+  test_dsearch2_retrieval_eval.py  retrieval quality tests
+  test_dsearch2_eval_tiers.py  document tier classification tests
+  test_dsearch2_answer_diversity.py  answer diversity tests
+  test_dsearch2_extraction_audit.py  text extraction tests
+  test_source_tiers.py         source reliability tests
+```
+
+---
+
+## Benchmark results
+
+Evaluated on a golden set of real queries across document types (contracts, invoices, technical specs, emails, scanned letters).
+
+| Model | MRR | Hit@1 | Hit@5 |
+|---|---|---|---|
+| Cohere-v3 | **0.91** | 0.82 | 0.97 |
+| E5-large | 0.87 | 0.76 | 0.95 |
+| E5-base | 0.84 | 0.73 | 0.93 |
+| GTE | 0.81 | 0.70 | 0.91 |
+| BGE-M3 | 0.78 | 0.66 | 0.89 |
+| BM25 only | 0.71 | 0.58 | 0.85 |
+| **BM25 + Cohere (hybrid)** | **0.94** | **0.85** | **0.99** |
+
+See `notebooks/01_model_comparison.ipynb` for the full comparison with charts.
+
+---
+
+## GPU-accelerated index building (optional)
+
+Building FAISS indexes for large corpora on CPU takes many hours. You can use a cloud GPU instead:
+
+```bash
+# Start a GCP T4 spot instance
+ssh <gcp-gateway> 'gcloud compute instances start $GCP_INSTANCE --zone=$GCP_ZONE'
+
+# Transfer chunks, run embedding remotely
+scp /tmp/chunks.jsonl gpu-instance:/tmp/
+ssh gpu-instance 'python3 gpu_embed_multi.py --model gte'
+
+# Copy indexes back
+scp -r gpu-instance:/tmp/faiss-index/ $FAISS_BASE/
+
+# Stop instance
+ssh <gcp-gateway> 'gcloud compute instances stop $GCP_INSTANCE --zone=$GCP_ZONE'
+```
+
+Set `GCP_PROJECT`, `GCP_INSTANCE`, `GCP_ZONE` in `~/.config/dsearch/.env`.
+
+Scripts: `scripts/gpu_embed.py`, `scripts/gpu_embed_multi.py`.
+
+---
+
+## Design notes
+
+**Why two venvs?**  
+GTE requires `transformers==4.49` due to a RoPE embedding bug introduced in 4.50. All other models work fine with newer versions. Keeping them separate avoids dependency conflicts.
+
+**Why Claude CLI instead of the API?**  
+The answer pipeline uses `claude -p` (Claude Code headless mode) so it inherits the user's existing subscription. No separate API key or billing setup needed for the LLM steps.
+
+**Why HyDE?**  
+Vocabulary mismatch is the main failure mode for domain-specific document search. A generated hypothetical answer contains the domain vocabulary that the real documents use, dramatically improving recall on terminology-gap queries.
+
+**Why agent ranking instead of a reranker?**  
+Cross-encoder rerankers require running a model locally per (query, doc) pair — expensive at 100 documents. Claude agents read the actual extracted text and score on relevance to the *intent*, not just lexical similarity. The subscription cost (~$0.10–0.20 for 10 agents) is cheaper than spinning up a GPU reranker.
+
+---
+
+## Requirements summary
+
+| Requirement | Version | Notes |
+|---|---|---|
+| Python | 3.10+ | |
+| Recoll | any recent | BM25 index |
+| Claude CLI | latest | `dsearch-answer` only |
+| Cohere API key | — | queries + index builds |
+| `pdftotext` | — | poppler-utils |
+| `antiword` | — | legacy `.doc` files |
+| faiss-cpu | 1.7+ | |
+| chromadb | 0.5+ | |
+| transformers | ==4.49 (GTE venv) | |
+| sentence-transformers | latest | |
+| numpy | latest | |
+| json-repair | latest | LLM JSON fault tolerance |
+| regex | latest | Unicode word boundaries |
+
+---
+
+## License
+
+MIT

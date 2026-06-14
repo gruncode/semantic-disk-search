@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>dsearch — control flow</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#1e1e2e; --bg2:#181825; --surface:#313244; --overlay:#45475a;
+  --text:#cdd6f4; --subtext:#a6adc8; --dim:#6c7086;
+  --blue:#89b4fa; --green:#a6e3a1; --yellow:#f9e2af; --red:#f38ba8;
+  --mauve:#cba6f7; --teal:#94e2d5;
+  --mono:'JetBrains Mono',monospace; --sans:'DM Sans',system-ui,sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body {
+  background:var(--bg); color:var(--text); font-family:var(--sans);
+  line-height:1.6; transition:padding-right .3s ease;
+  min-height:100vh;
+}
+body.panel-open { padding-right:50%; }
+
+/* ─── Hero ─── */
+.hero {
+  position:relative; padding:44px 40px 28px;
+  background:var(--bg2); border-bottom:1px solid var(--overlay);
+  overflow:hidden;
+}
+.hero::before {
+  content:''; position:absolute; top:-80px; right:-80px;
+  width:360px; height:360px;
+  background:radial-gradient(circle,rgba(137,180,250,.09) 0%,transparent 70%);
+  pointer-events:none;
+}
+.hero-inner { max-width:1300px; margin:0 auto; position:relative; z-index:1; }
+.hero h1 {
+  font-family:var(--mono); font-size:2.2em; font-weight:700;
+  color:var(--blue); letter-spacing:-.02em;
+}
+.hero h1 span { color:var(--mauve); }
+.hero .tagline { color:var(--subtext); font-size:.95em; margin-top:6px; }
+.chips { display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+.chip {
+  background:var(--surface); border:1px solid var(--overlay);
+  padding:5px 12px; border-radius:18px;
+  font-size:.75em; font-family:var(--mono);
+}
+.chip b { color:var(--green); }
+.chip.accent { border-color:var(--blue); color:var(--blue); }
+
+/* ─── Main diagram ─── */
+.main { max-width:1400px; margin:0 auto; padding:26px 40px 60px; }
+.diagram-box {
+  background:var(--bg2); border:1px solid var(--overlay);
+  border-radius:10px; padding:14px;
+  overflow-x:auto;
+}
+.diagram-box svg {
+  width:100%; height:auto; display:block;
+  min-width:1100px;
+}
+.hint {
+  color:var(--dim); font-family:var(--mono); font-size:.72em;
+  text-align:center; margin-top:12px;
+}
+.hint kbd {
+  background:var(--surface); border:1px solid var(--overlay);
+  border-radius:3px; padding:1px 6px; font-size:.9em;
+  color:var(--text);
+}
+
+/* SVG interaction cues */
+svg a { cursor:pointer; }
+svg a:hover rect.box { stroke:var(--red); stroke-width:2.5; fill:var(--overlay); }
+svg a:hover polygon.diamond { stroke:var(--red); stroke-width:2.5; fill:var(--overlay); }
+
+/* ─── Code side-panel ─── */
+#code-panel {
+  position:fixed; top:0; right:-55%;
+  width:49%; height:100vh;
+  background:#11111b; border-left:2px solid var(--overlay);
+  box-shadow:-4px 0 20px rgba(0,0,0,.6);
+  transition:right .3s ease, width 0s; z-index:9999;
+  display:flex; flex-direction:column;
+}
+#code-panel.open { right:0; }
+#code-panel.resizing { transition:none; user-select:none; }
+body.resizing { user-select:none; cursor:ew-resize !important; }
+#resizer {
+  position:absolute; top:0; left:-4px; width:8px; height:100%;
+  cursor:ew-resize; background:transparent; z-index:10000;
+}
+#resizer:hover, #resizer.active {
+  background:linear-gradient(90deg, transparent, var(--blue) 45%, var(--blue) 55%, transparent);
+}
+#code-panel-header {
+  padding:10px 16px; background:var(--bg2);
+  border-bottom:1px solid var(--overlay);
+  display:flex; justify-content:space-between; align-items:center;
+}
+#code-panel-title {
+  font-family:var(--mono); font-size:.85em;
+  color:var(--blue); font-weight:700;
+}
+#code-panel-close {
+  background:var(--red); color:var(--bg);
+  border:none; padding:4px 10px; border-radius:4px;
+  cursor:pointer; font-weight:700; font-size:.72em;
+}
+#code-panel-close:hover { background:#fab387; }
+#code-panel-body {
+  flex:1; overflow:auto;
+  font-family:var(--mono); font-size:.76em;
+  line-height:1.55; background:#11111b;
+  padding:12px 0 80px;
+}
+.sline { display:flex; padding:0 12px; }
+.sline .sln {
+  color:var(--overlay); width:44px; text-align:right;
+  padding-right:12px; user-select:none;
+  border-right:1px solid var(--surface); flex-shrink:0;
+}
+.sline .sc { padding-left:12px; white-space:pre; color:var(--text); }
+.sline.hl { background:rgba(69,71,90,.45); }
+.sline.hl .sln { color:var(--yellow); }
+.sline.target { background:rgba(137,180,250,.18); }
+.sline.target .sln { color:var(--blue); font-weight:700; }
+
+@media (max-width:1000px) {
+  body.panel-open { padding-right:0; }
+  #code-panel { width:100%; right:-100%; }
+}
+</style>
+</head><body>
+
+<!-- Slide-in code side-panel -->
+<div id="code-panel">
+  <div id="resizer" title="Drag to resize"></div>
+  <div id="code-panel-header">
+    <span id="code-panel-title">dsearch — source</span>
+    <button id="code-panel-close">CLOSE ✕</button>
+  </div>
+  <div id="code-panel-body">
+<div id="SL1" class="sline"><span class="sln">1</span><span class="sc">#!/bin/bash</span></div>
+<div id="SL2" class="sline"><span class="sln">2</span><span class="sc"># ================================================================================</span></div>
+<div id="SL3" class="sline"><span class="sln">3</span><span class="sc"># dsearch — Full-disk semantic search CLI</span></div>
+<div id="SL4" class="sline"><span class="sln">4</span><span class="sc"># ================================================================================</span></div>
+<div id="SL5" class="sline"><span class="sln">5</span><span class="sc">#</span></div>
+<div id="SL6" class="sline"><span class="sln">6</span><span class="sc"># PURPOSE</span></div>
+<div id="SL7" class="sline"><span class="sln">7</span><span class="sc">#   Entry point for semantic search across ~/DATA. Routes to one of 3 modes:</span></div>
+<div id="SL8" class="sline"><span class="sln">8</span><span class="sc">#     - Terminal mode (default)        — colored text output, quick ranked list</span></div>
+<div id="SL9" class="sline"><span class="sln">9</span><span class="sc">#     - HTML mode (-w)                 — sortable/filterable HTML table in browser</span></div>
+<div id="SL10" class="sline"><span class="sln">10</span><span class="sc">#     - Answer mode (-CLexpand-...)    — full 6-step pipeline → cited answer</span></div>
+<div id="SL11" class="sline"><span class="sln">11</span><span class="sc">#</span></div>
+<div id="SL12" class="sline"><span class="sln">12</span><span class="sc"># INPUTS</span></div>
+<div id="SL13" class="sline"><span class="sln">13</span><span class="sc">#   Command-line flags (see usage() below) + positional query words</span></div>
+<div id="SL14" class="sline"><span class="sln">14</span><span class="sc">#</span></div>
+<div id="SL15" class="sline"><span class="sln">15</span><span class="sc"># OUTPUTS</span></div>
+<div id="SL16" class="sline"><span class="sln">16</span><span class="sc">#   Terminal mode: colored rows to stdout (score, path, snippet)</span></div>
+<div id="SL17" class="sline"><span class="sln">17</span><span class="sc">#   HTML mode:     /tmp/dsearch_results.html, opened via xdg-open</span></div>
+<div id="SL18" class="sline"><span class="sln">18</span><span class="sc">#   Answer mode:   delegates to dsearch-answer (which prints ANSWER + SOURCES)</span></div>
+<div id="SL19" class="sline"><span class="sln">19</span><span class="sc">#</span></div>
+<div id="SL20" class="sline"><span class="sln">20</span><span class="sc"># RESOURCES</span></div>
+<div id="SL21" class="sline"><span class="sln">21</span><span class="sc">#   ~/.config/dsearch/.env                 — COHERE_API_KEY (loaded at startup)</span></div>
+<div id="SL22" class="sline"><span class="sln">22</span><span class="sc">#   $CHROMADB_DIR — ChromaDB persistent collection &#x27;fulldisk&#x27;</span></div>
+<div id="SL23" class="sline"><span class="sln">23</span><span class="sc">#   $VENV_GTE/ — Python venv (has cohere + chromadb libs)</span></div>
+<div id="SL24" class="sline"><span class="sln">24</span><span class="sc">#</span></div>
+<div id="SL25" class="sline"><span class="sln">25</span><span class="sc"># RELATED FILES</span></div>
+<div id="SL26" class="sline"><span class="sln">26</span><span class="sc">#   dsearch-answer              — Full CLexpand→CLrank→CLanswer pipeline (6 steps)</span></div>
+<div id="SL27" class="sline"><span class="sln">27</span><span class="sc">#   extract_chunks.py           — Builds ChromaDB from disk files (one-time indexing)</span></div>
+<div id="SL28" class="sline"><span class="sln">28</span><span class="sc">#   docs/index.html             — Diagram, clickable links back to dsearch-answer</span></div>
+<div id="SL29" class="sline"><span class="sln">29</span><span class="sc"># ================================================================================</span></div>
+<div id="SL30" class="sline"><span class="sln">30</span><span class="sc">&nbsp;</span></div>
+<div id="SL31" class="sline"><span class="sln">31</span><span class="sc"># Load API keys from ~/.config/dsearch/.env into environment</span></div>
+<div id="SL32" class="sline"><span class="sln">32</span><span class="sc"># set -a: auto-export all variables that get defined</span></div>
+<div id="SL33" class="sline"><span class="sln">33</span><span class="sc"># 2&gt;/dev/null: silently skip if file missing (keys may be in shell already)</span></div>
+<div id="SL34" class="sline"><span class="sln">34</span><span class="sc">set -a; source ~/.config/dsearch/.env 2&gt;/dev/null; set +a</span></div>
+<div id="SL35" class="sline"><span class="sln">35</span><span class="sc">&nbsp;</span></div>
+<div id="SL36" class="sline"><span class="sln">36</span><span class="sc">usage() {</span></div>
+<div id="SL37" class="sline"><span class="sln">37</span><span class="sc">    cat &lt;&lt;&#x27;EOF&#x27;</span></div>
+<div id="SL38" class="sline"><span class="sln">38</span><span class="sc">dsearch — full-disk semantic search (Cohere embed-v3 + ChromaDB, 941K chunks)</span></div>
+<div id="SL39" class="sline"><span class="sln">39</span><span class="sc">&nbsp;</span></div>
+<div id="SL40" class="sline"><span class="sln">40</span><span class="sc">Usage: dsearch [-n NUM] [-w] [-CLexpand-CLrank-CLanswer] query words</span></div>
+<div id="SL41" class="sline"><span class="sln">41</span><span class="sc">&nbsp;</span></div>
+<div id="SL42" class="sline"><span class="sln">42</span><span class="sc">Options:</span></div>
+<div id="SL43" class="sline"><span class="sln">43</span><span class="sc">  -n NUM   Number of results (default: 50)</span></div>
+<div id="SL44" class="sline"><span class="sln">44</span><span class="sc">  -w       Open results as sortable HTML table in browser</span></div>
+<div id="SL45" class="sline"><span class="sln">45</span><span class="sc">           (sort by column, filter, group by folder, query highlights)</span></div>
+<div id="SL46" class="sline"><span class="sln">46</span><span class="sc">  -CLexpand-CLrank-CLanswer</span></div>
+<div id="SL47" class="sline"><span class="sln">47</span><span class="sc">           Answer mode: understand query → 100 files → 10 parallel Claude agents</span></div>
+<div id="SL48" class="sline"><span class="sln">48</span><span class="sc">           rank files → final Claude reads top 15 originals → answer (~3-4 min)</span></div>
+<div id="SL49" class="sline"><span class="sln">49</span><span class="sc">  -deep    Deep mode (with -CLexpand-CLrank-CLanswer): multi-hop retrieval loop</span></div>
+<div id="SL50" class="sline"><span class="sln">50</span><span class="sc">           reads results, extracts new terms, searches again (max 3 loops, +1-2 min)</span></div>
+<div id="SL51" class="sline"><span class="sln">51</span><span class="sc">  -h       Show this help</span></div>
+<div id="SL52" class="sline"><span class="sln">52</span><span class="sc">&nbsp;</span></div>
+<div id="SL53" class="sline"><span class="sln">53</span><span class="sc">Examples:</span></div>
+<div id="SL54" class="sline"><span class="sln">54</span><span class="sc">  dsearch zoneminder camera setup</span></div>
+<div id="SL55" class="sline"><span class="sln">55</span><span class="sc">  dsearch -n 20 300045268</span></div>
+<div id="SL56" class="sline"><span class="sln">56</span><span class="sc">  dsearch -w -n 100 invoice pdf</span></div>
+<div id="SL57" class="sline"><span class="sln">57</span><span class="sc">  dsearch -CLexpand-CLrank-CLanswer find all documents about project delays</span></div>
+<div id="SL58" class="sline"><span class="sln">58</span><span class="sc">  dsearch -CLexpand-CLrank-CLanswer -deep deep search for project timeline documents</span></div>
+<div id="SL59" class="sline"><span class="sln">59</span><span class="sc">EOF</span></div>
+<div id="SL60" class="sline"><span class="sln">60</span><span class="sc">    exit 0</span></div>
+<div id="SL61" class="sline"><span class="sln">61</span><span class="sc">}</span></div>
+<div id="SL62" class="sline"><span class="sln">62</span><span class="sc">&nbsp;</span></div>
+<div id="SL63" class="sline"><span class="sln">63</span><span class="sc"># ── Arg parsing ──────────────────────────────────────────────</span></div>
+<div id="SL64" class="sline"><span class="sln">64</span><span class="sc">NRESULTS=50           # Default: 50 results for quick browsing</span></div>
+<div id="SL65" class="sline"><span class="sln">65</span><span class="sc">WEBMODE=0             # -w flag → HTML output</span></div>
+<div id="SL66" class="sline"><span class="sln">66</span><span class="sc">ANSWERMODE=0          # -CLexpand-CLrank-CLanswer → delegate to dsearch-answer</span></div>
+<div id="SL67" class="sline"><span class="sln">67</span><span class="sc">DEEPMODE=&quot;&quot;           # -deep (only meaningful with ANSWERMODE)</span></div>
+<div id="SL68" class="sline"><span class="sln">68</span><span class="sc">while [ $# -gt 0 ]; do</span></div>
+<div id="SL69" class="sline"><span class="sln">69</span><span class="sc">    case &quot;$1&quot; in</span></div>
+<div id="SL70" class="sline"><span class="sln">70</span><span class="sc">        -h|--help) usage ;;</span></div>
+<div id="SL71" class="sline"><span class="sln">71</span><span class="sc">        -n) NRESULTS=&quot;$2&quot;; shift 2 ;;</span></div>
+<div id="SL72" class="sline"><span class="sln">72</span><span class="sc">        -w) WEBMODE=1; shift ;;</span></div>
+<div id="SL73" class="sline"><span class="sln">73</span><span class="sc">        # Answer mode forces NRESULTS=100 (pipeline needs 100 files for 10×10 agents)</span></div>
+<div id="SL74" class="sline"><span class="sln">74</span><span class="sc">        -CLexpand-CLrank-CLanswer) ANSWERMODE=1; NRESULTS=100; shift ;;</span></div>
+<div id="SL75" class="sline"><span class="sln">75</span><span class="sc">        -deep) DEEPMODE=&quot;-deep&quot;; shift ;;</span></div>
+<div id="SL76" class="sline"><span class="sln">76</span><span class="sc">        *) break ;;     # First non-flag arg → query starts here</span></div>
+<div id="SL77" class="sline"><span class="sln">77</span><span class="sc">    esac</span></div>
+<div id="SL78" class="sline"><span class="sln">78</span><span class="sc">done</span></div>
+<div id="SL79" class="sline"><span class="sln">79</span><span class="sc">QUERY=&quot;$*&quot;              # Join remaining args as the query string</span></div>
+<div id="SL80" class="sline"><span class="sln">80</span><span class="sc"># Interactive fallback if no query given (useful when running dsearch with no args)</span></div>
+<div id="SL81" class="sline"><span class="sln">81</span><span class="sc">[ -z &quot;$QUERY&quot; ] &amp;&amp; read -p &quot;Query: &quot; QUERY</span></div>
+<div id="SL82" class="sline"><span class="sln">82</span><span class="sc">&nbsp;</span></div>
+<div id="SL83" class="sline"><span class="sln">83</span><span class="sc"># ── Mode dispatch ────────────────────────────────────────────</span></div>
+<div id="SL84" class="sline"><span class="sln">84</span><span class="sc">if [ &quot;$ANSWERMODE&quot; = &quot;1&quot; ]; then</span></div>
+<div id="SL85" class="sline"><span class="sln">85</span><span class="sc">    # ── Answer mode: hand off to dsearch-answer (6-step pipeline) ──</span></div>
+<div id="SL86" class="sline"><span class="sln">86</span><span class="sc">    # exec replaces this shell process with Python (no wrapper overhead)</span></div>
+<div id="SL87" class="sline"><span class="sln">87</span><span class="sc">    exec $VENV_GTE /usr/local/bin/dsearch-answer $DEEPMODE &quot;$QUERY&quot; &quot;$NRESULTS&quot;</span></div>
+<div id="SL88" class="sline"><span class="sln">88</span><span class="sc">elif [ &quot;$WEBMODE&quot; = &quot;1&quot; ]; then</span></div>
+<div id="SL89" class="sline"><span class="sln">89</span><span class="sc">    # ── HTML mode: generate sortable/filterable table, open in browser ──</span></div>
+<div id="SL90" class="sline"><span class="sln">90</span><span class="sc">    # Pass query/n via env vars (cleaner than argv for strings with special chars)</span></div>
+<div id="SL91" class="sline"><span class="sln">91</span><span class="sc">    export DSEARCH_QUERY=&quot;$QUERY&quot;</span></div>
+<div id="SL92" class="sline"><span class="sln">92</span><span class="sc">    export DSEARCH_N=&quot;$NRESULTS&quot;</span></div>
+<div id="SL93" class="sline"><span class="sln">93</span><span class="sc">    $VENV_GTE &lt;&lt; &#x27;PYEOF&#x27;</span></div>
+<div id="SL94" class="sline"><span class="sln">94</span><span class="sc"># HTML mode embedded Python — builds a self-contained single-file HTML report.</span></div>
+<div id="SL95" class="sline"><span class="sln">95</span><span class="sc"># Reads query from env, embeds with Cohere, queries ChromaDB, emits sortable table.</span></div>
+<div id="SL96" class="sline"><span class="sln">96</span><span class="sc">import os, re, html as h, time, cohere, chromadb</span></div>
+<div id="SL97" class="sline"><span class="sln">97</span><span class="sc">&nbsp;</span></div>
+<div id="SL98" class="sline"><span class="sln">98</span><span class="sc">q = os.environ[&#x27;DSEARCH_QUERY&#x27;]</span></div>
+<div id="SL99" class="sline"><span class="sln">99</span><span class="sc">n = int(os.environ[&#x27;DSEARCH_N&#x27;])</span></div>
+<div id="SL100" class="sline"><span class="sln">100</span><span class="sc">&nbsp;</span></div>
+<div id="SL101" class="sline"><span class="sln">101</span><span class="sc"># Single-query Cohere embed (async version in dsearch-answer handles batch)</span></div>
+<div id="SL102" class="sline"><span class="sln">102</span><span class="sc">co = cohere.ClientV2(api_key=os.environ[&#x27;COHERE_API_KEY&#x27;])</span></div>
+<div id="SL103" class="sline"><span class="sln">103</span><span class="sc">resp = co.embed(texts=[q], model=&#x27;embed-multilingual-v3.0&#x27;,</span></div>
+<div id="SL104" class="sline"><span class="sln">104</span><span class="sc">                input_type=&#x27;search_query&#x27;, embedding_types=[&#x27;float&#x27;])</span></div>
+<div id="SL105" class="sline"><span class="sln">105</span><span class="sc">&nbsp;</span></div>
+<div id="SL106" class="sline"><span class="sln">106</span><span class="sc"># ChromaDB: 941K chunks indexed from ~/DATA (built by extract_chunks.py)</span></div>
+<div id="SL107" class="sline"><span class="sln">107</span><span class="sc">col = chromadb.PersistentClient(</span></div>
+<div id="SL108" class="sline"><span class="sln">108</span><span class="sc">    path=&#x27;$CHROMADB_DIR&#x27;).get_collection(&#x27;fulldisk&#x27;)</span></div>
+<div id="SL109" class="sline"><span class="sln">109</span><span class="sc">results = col.query(query_embeddings=resp.embeddings.float_, n_results=n)</span></div>
+<div id="SL110" class="sline"><span class="sln">110</span><span class="sc">&nbsp;</span></div>
+<div id="SL111" class="sline"><span class="sln">111</span><span class="sc"># Build a word-level highlight regex.</span></div>
+<div id="SL112" class="sline"><span class="sln">112</span><span class="sc"># Filter 3+ chars: avoids highlighting &quot;a&quot;, &quot;of&quot;, &quot;το&quot; etc. (too noisy)</span></div>
+<div id="SL113" class="sline"><span class="sln">113</span><span class="sc"># \b word boundaries work with Greek since Python&#x27;s re module is Unicode-aware</span></div>
+<div id="SL114" class="sline"><span class="sln">114</span><span class="sc">words = [w for w in q.split() if len(w) &gt; 2]</span></div>
+<div id="SL115" class="sline"><span class="sln">115</span><span class="sc">pat = re.compile(r&#x27;\b(&#x27; + &#x27;|&#x27;.join(re.escape(w) for w in words) + r&#x27;)\b&#x27;,</span></div>
+<div id="SL116" class="sline"><span class="sln">116</span><span class="sc">                 re.IGNORECASE) if words else None</span></div>
+<div id="SL117" class="sline"><span class="sln">117</span><span class="sc">&nbsp;</span></div>
+<div id="SL118" class="sline"><span class="sln">118</span><span class="sc">def hl(text):</span></div>
+<div id="SL119" class="sline"><span class="sln">119</span><span class="sc">    &quot;&quot;&quot;HTML-escape then wrap query words in &lt;span class=&quot;hl&quot;&gt; for yellow highlight.&quot;&quot;&quot;</span></div>
+<div id="SL120" class="sline"><span class="sln">120</span><span class="sc">    text = h.escape(text)</span></div>
+<div id="SL121" class="sline"><span class="sln">121</span><span class="sc">    if pat:</span></div>
+<div id="SL122" class="sline"><span class="sln">122</span><span class="sc">        text = pat.sub(r&#x27;&lt;span class=&quot;hl&quot;&gt;\1&lt;/span&gt;&#x27;, text)</span></div>
+<div id="SL123" class="sline"><span class="sln">123</span><span class="sc">    return text</span></div>
+<div id="SL124" class="sline"><span class="sln">124</span><span class="sc">&nbsp;</span></div>
+<div id="SL125" class="sline"><span class="sln">125</span><span class="sc">def score_cls(s):</span></div>
+<div id="SL126" class="sline"><span class="sln">126</span><span class="sc">    &quot;&quot;&quot;Map score 0-1 to CSS class for color coding.</span></div>
+<div id="SL127" class="sline"><span class="sln">127</span><span class="sc">       sh=green high &gt;=0.6, sm=yellow mid &gt;=0.5, sl=red low &lt;0.5&quot;&quot;&quot;</span></div>
+<div id="SL128" class="sline"><span class="sln">128</span><span class="sc">    if s &gt;= 0.6: return &#x27;sh&#x27;</span></div>
+<div id="SL129" class="sline"><span class="sln">129</span><span class="sc">    if s &gt;= 0.5: return &#x27;sm&#x27;</span></div>
+<div id="SL130" class="sline"><span class="sln">130</span><span class="sc">    return &#x27;sl&#x27;</span></div>
+<div id="SL131" class="sline"><span class="sln">131</span><span class="sc">&nbsp;</span></div>
+<div id="SL132" class="sline"><span class="sln">132</span><span class="sc">def fmt_date(ts):</span></div>
+<div id="SL133" class="sline"><span class="sln">133</span><span class="sc">    try:</span></div>
+<div id="SL134" class="sline"><span class="sln">134</span><span class="sc">        return time.strftime(&#x27;%Y-%m-%d&#x27;, time.localtime(int(ts)))</span></div>
+<div id="SL135" class="sline"><span class="sln">135</span><span class="sc">    except:</span></div>
+<div id="SL136" class="sline"><span class="sln">136</span><span class="sc">        return &#x27;—&#x27;</span></div>
+<div id="SL137" class="sline"><span class="sln">137</span><span class="sc">&nbsp;</span></div>
+<div id="SL138" class="sline"><span class="sln">138</span><span class="sc"># Build one &lt;tr&gt; per result. data-val attributes hold sortable values</span></div>
+<div id="SL139" class="sline"><span class="sln">139</span><span class="sc"># (e.g. raw score/timestamp) so JS sort doesn&#x27;t have to re-parse the display text.</span></div>
+<div id="SL140" class="sline"><span class="sln">140</span><span class="sc">rows = []</span></div>
+<div id="SL141" class="sline"><span class="sln">141</span><span class="sc">for i, (doc, meta, dist) in enumerate(zip(</span></div>
+<div id="SL142" class="sline"><span class="sln">142</span><span class="sc">        results[&#x27;documents&#x27;][0], results[&#x27;metadatas&#x27;][0],</span></div>
+<div id="SL143" class="sline"><span class="sln">143</span><span class="sc">        results[&#x27;distances&#x27;][0])):</span></div>
+<div id="SL144" class="sline"><span class="sln">144</span><span class="sc">    score = 1 - dist                          # Cosine distance → similarity</span></div>
+<div id="SL145" class="sline"><span class="sln">145</span><span class="sc">    path = meta[&#x27;path&#x27;]</span></div>
+<div id="SL146" class="sline"><span class="sln">146</span><span class="sc">    dirn = os.path.dirname(path)              # Parent folder (full path)</span></div>
+<div id="SL147" class="sline"><span class="sln">147</span><span class="sc">    fname = os.path.basename(path)</span></div>
+<div id="SL148" class="sline"><span class="sln">148</span><span class="sc">    ext = meta.get(&#x27;ext&#x27;, &#x27;&#x27;)                 # File extension (without dot)</span></div>
+<div id="SL149" class="sline"><span class="sln">149</span><span class="sc">    cat = meta.get(&#x27;folder&#x27;, &#x27;&#x27;)              # Top-level category (DATA/Finance, etc)</span></div>
+<div id="SL150" class="sline"><span class="sln">150</span><span class="sc">    mdate = fmt_date(meta.get(&#x27;mtime&#x27;, &#x27;0&#x27;))  # Human-readable modification date</span></div>
+<div id="SL151" class="sline"><span class="sln">151</span><span class="sc">    mts = meta.get(&#x27;mtime&#x27;, &#x27;0&#x27;)              # Raw epoch seconds (for sorting)</span></div>
+<div id="SL152" class="sline"><span class="sln">152</span><span class="sc">    cidx = meta.get(&#x27;chunk_idx&#x27;, 0)           # Which chunk of the file matched</span></div>
+<div id="SL153" class="sline"><span class="sln">153</span><span class="sc">    ctot = meta.get(&#x27;total_chunks&#x27;, 1)        # Total chunks in that file</span></div>
+<div id="SL154" class="sline"><span class="sln">154</span><span class="sc">    snippet = doc[:250]                       # First 250 chars of matching chunk</span></div>
+<div id="SL155" class="sline"><span class="sln">155</span><span class="sc">    rows.append(f&#x27;&#x27;&#x27;&lt;tr&gt;</span></div>
+<div id="SL156" class="sline"><span class="sln">156</span><span class="sc">  &lt;td class=&quot;c&quot; data-val=&quot;{i+1}&quot;&gt;{i+1}&lt;/td&gt;</span></div>
+<div id="SL157" class="sline"><span class="sln">157</span><span class="sc">  &lt;td class=&quot;c {score_cls(score)}&quot; data-val=&quot;{score:.4f}&quot;&gt;{score:.3f}&lt;/td&gt;</span></div>
+<div id="SL158" class="sline"><span class="sln">158</span><span class="sc">  &lt;td class=&quot;cat&quot;&gt;{h.escape(cat)}&lt;/td&gt;</span></div>
+<div id="SL159" class="sline"><span class="sln">159</span><span class="sc">  &lt;td class=&quot;folder&quot; data-val=&quot;{h.escape(dirn)}&quot;&gt;&lt;a href=&quot;file://{h.escape(dirn)}&quot;&gt;{hl(dirn)}&lt;/a&gt;&lt;/td&gt;</span></div>
+<div id="SL160" class="sline"><span class="sln">160</span><span class="sc">  &lt;td class=&quot;fname&quot;&gt;&lt;a href=&quot;file://{h.escape(path)}&quot;&gt;{hl(fname)}&lt;/a&gt;&lt;/td&gt;</span></div>
+<div id="SL161" class="sline"><span class="sln">161</span><span class="sc">  &lt;td class=&quot;ext&quot;&gt;{h.escape(ext)}&lt;/td&gt;</span></div>
+<div id="SL162" class="sline"><span class="sln">162</span><span class="sc">  &lt;td class=&quot;c&quot; data-val=&quot;{mts}&quot;&gt;{mdate}&lt;/td&gt;</span></div>
+<div id="SL163" class="sline"><span class="sln">163</span><span class="sc">  &lt;td class=&quot;c chunk&quot;&gt;{cidx}/{ctot}&lt;/td&gt;</span></div>
+<div id="SL164" class="sline"><span class="sln">164</span><span class="sc">  &lt;td class=&quot;snip&quot; title=&quot;{h.escape(doc[:300])}&quot;&gt;{hl(snippet)}&lt;/td&gt;</span></div>
+<div id="SL165" class="sline"><span class="sln">165</span><span class="sc">&lt;/tr&gt;&#x27;&#x27;&#x27;)</span></div>
+<div id="SL166" class="sline"><span class="sln">166</span><span class="sc">&nbsp;</span></div>
+<div id="SL167" class="sline"><span class="sln">167</span><span class="sc"># Assemble the final HTML page (single file, no external deps).</span></div>
+<div id="SL168" class="sline"><span class="sln">168</span><span class="sc"># Colors: Catppuccin Mocha palette (dark mode)</span></div>
+<div id="SL169" class="sline"><span class="sln">169</span><span class="sc"># Layout: sticky header, sortable columns, live filter, group-by-folder toggle</span></div>
+<div id="SL170" class="sline"><span class="sln">170</span><span class="sc">page = f&#x27;&#x27;&#x27;&lt;!DOCTYPE html&gt;</span></div>
+<div id="SL171" class="sline"><span class="sln">171</span><span class="sc">&lt;html&gt;&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;</span></div>
+<div id="SL172" class="sline"><span class="sln">172</span><span class="sc">&lt;title&gt;dsearch: {h.escape(q)}&lt;/title&gt;</span></div>
+<div id="SL173" class="sline"><span class="sln">173</span><span class="sc">&lt;style&gt;</span></div>
+<div id="SL174" class="sline"><span class="sln">174</span><span class="sc">*{{margin:0;padding:0;box-sizing:border-box}}</span></div>
+<div id="SL175" class="sline"><span class="sln">175</span><span class="sc">body{{background:#1e1e2e;color:#cdd6f4;font-family:&#x27;Segoe UI&#x27;,system-ui,sans-serif;padding:16px 20px}}</span></div>
+<div id="SL176" class="sline"><span class="sln">176</span><span class="sc">h1{{color:#89b4fa;font-size:1.3em;margin-bottom:4px}}</span></div>
+<div id="SL177" class="sline"><span class="sln">177</span><span class="sc">.meta{{color:#6c7086;font-size:.85em;margin-bottom:12px}}</span></div>
+<div id="SL178" class="sline"><span class="sln">178</span><span class="sc">.bar{{display:flex;gap:10px;margin-bottom:12px;align-items:center}}</span></div>
+<div id="SL179" class="sline"><span class="sln">179</span><span class="sc">.filter{{flex:1;padding:7px 12px;background:#313244;border:1px solid #45475a;color:#cdd6f4;border-radius:6px;font-size:.9em}}</span></div>
+<div id="SL180" class="sline"><span class="sln">180</span><span class="sc">.filter:focus{{outline:none;border-color:#89b4fa}}</span></div>
+<div id="SL181" class="sline"><span class="sln">181</span><span class="sc">.btn{{padding:7px 14px;background:#313244;border:1px solid #45475a;color:#cdd6f4;border-radius:6px;cursor:pointer;font-size:.85em}}</span></div>
+<div id="SL182" class="sline"><span class="sln">182</span><span class="sc">.btn:hover{{background:#45475a}}</span></div>
+<div id="SL183" class="sline"><span class="sln">183</span><span class="sc">.btn.active{{background:#89b4fa;color:#1e1e2e;border-color:#89b4fa}}</span></div>
+<div id="SL184" class="sline"><span class="sln">184</span><span class="sc">table{{width:100%;border-collapse:collapse;table-layout:fixed}}</span></div>
+<div id="SL185" class="sline"><span class="sln">185</span><span class="sc">th{{background:#313244;color:#89b4fa;padding:8px 10px;cursor:pointer;user-select:none;text-align:left;position:sticky;top:0;font-size:.82em;white-space:nowrap}}</span></div>
+<div id="SL186" class="sline"><span class="sln">186</span><span class="sc">th:hover{{background:#45475a}}</span></div>
+<div id="SL187" class="sline"><span class="sln">187</span><span class="sc">.ar{{margin-left:4px;font-size:.7em}}</span></div>
+<div id="SL188" class="sline"><span class="sln">188</span><span class="sc">td{{padding:5px 10px;border-bottom:1px solid #2a2a3c;font-size:.82em;vertical-align:top;overflow:hidden;text-overflow:ellipsis}}</span></div>
+<div id="SL189" class="sline"><span class="sln">189</span><span class="sc">tr:hover{{background:#313244}}</span></div>
+<div id="SL190" class="sline"><span class="sln">190</span><span class="sc">.c{{text-align:center}}</span></div>
+<div id="SL191" class="sline"><span class="sln">191</span><span class="sc">.sh{{color:#a6e3a1;font-weight:bold}}</span></div>
+<div id="SL192" class="sline"><span class="sln">192</span><span class="sc">.sm{{color:#f9e2af}}</span></div>
+<div id="SL193" class="sline"><span class="sln">193</span><span class="sc">.sl{{color:#f38ba8}}</span></div>
+<div id="SL194" class="sline"><span class="sln">194</span><span class="sc">.cat{{color:#f5c2e7;font-size:.78em}}</span></div>
+<div id="SL195" class="sline"><span class="sln">195</span><span class="sc">.folder{{color:#89b4fa;word-break:break-all}}</span></div>
+<div id="SL196" class="sline"><span class="sln">196</span><span class="sc">.fname{{color:#cba6f7;font-weight:bold;word-break:break-all}}</span></div>
+<div id="SL197" class="sline"><span class="sln">197</span><span class="sc">.ext{{color:#94e2d5;text-align:center;font-size:.78em}}</span></div>
+<div id="SL198" class="sline"><span class="sln">198</span><span class="sc">.chunk{{color:#6c7086;font-size:.75em}}</span></div>
+<div id="SL199" class="sline"><span class="sln">199</span><span class="sc">.snip{{color:#a6adc8;font-size:.78em}}</span></div>
+<div id="SL200" class="sline"><span class="sln">200</span><span class="sc">/* .hl = yellow highlight for query words (server-side, always on) */</span></div>
+<div id="SL201" class="sline"><span class="sln">201</span><span class="sc">.hl{{background:#f9e2af30;color:#f9e2af;font-weight:bold;padding:0 2px;border-radius:2px}}</span></div>
+<div id="SL202" class="sline"><span class="sln">202</span><span class="sc">/* .fhl = blue highlight for filter matches (client-side, added live by filter JS) */</span></div>
+<div id="SL203" class="sline"><span class="sln">203</span><span class="sc">.fhl{{background:#89b4fa40;color:#89b4fa;font-weight:bold;padding:0 2px;border-radius:2px}}</span></div>
+<div id="SL204" class="sline"><span class="sln">204</span><span class="sc">a{{color:inherit;text-decoration:none}}</span></div>
+<div id="SL205" class="sline"><span class="sln">205</span><span class="sc">a:hover{{text-decoration:underline}}</span></div>
+<div id="SL206" class="sline"><span class="sln">206</span><span class="sc">col.c1{{width:34px}}col.c2{{width:52px}}col.c3{{width:70px}}col.c4{{width:28%}}col.c5{{width:15%}}col.c6{{width:42px}}col.c7{{width:76px}}col.c8{{width:48px}}</span></div>
+<div id="SL207" class="sline"><span class="sln">207</span><span class="sc">.hidden{{display:none}}</span></div>
+<div id="SL208" class="sline"><span class="sln">208</span><span class="sc">&lt;/style&gt;&lt;/head&gt;&lt;body&gt;</span></div>
+<div id="SL209" class="sline"><span class="sln">209</span><span class="sc">&lt;h1&gt;dsearch: {h.escape(q)}&lt;/h1&gt;</span></div>
+<div id="SL210" class="sline"><span class="sln">210</span><span class="sc">&lt;div class=&quot;meta&quot;&gt;{len(rows)} results &amp;middot; Cohere embed-v3 + ChromaDB&lt;/div&gt;</span></div>
+<div id="SL211" class="sline"><span class="sln">211</span><span class="sc">&lt;div class=&quot;bar&quot;&gt;</span></div>
+<div id="SL212" class="sline"><span class="sln">212</span><span class="sc">  &lt;input class=&quot;filter&quot; type=&quot;text&quot; placeholder=&quot;Filter by path or content...&quot; id=&quot;f&quot;&gt;</span></div>
+<div id="SL213" class="sline"><span class="sln">213</span><span class="sc">  &lt;button class=&quot;btn&quot; id=&quot;gf&quot;&gt;Group by folder&lt;/button&gt;</span></div>
+<div id="SL214" class="sline"><span class="sln">214</span><span class="sc">&lt;/div&gt;</span></div>
+<div id="SL215" class="sline"><span class="sln">215</span><span class="sc">&lt;table id=&quot;t&quot;&gt;</span></div>
+<div id="SL216" class="sline"><span class="sln">216</span><span class="sc">&lt;colgroup&gt;&lt;col class=&quot;c1&quot;&gt;&lt;col class=&quot;c2&quot;&gt;&lt;col class=&quot;c3&quot;&gt;&lt;col class=&quot;c4&quot;&gt;&lt;col class=&quot;c5&quot;&gt;&lt;col class=&quot;c6&quot;&gt;&lt;col class=&quot;c7&quot;&gt;&lt;col class=&quot;c8&quot;&gt;&lt;col&gt;&lt;/colgroup&gt;</span></div>
+<div id="SL217" class="sline"><span class="sln">217</span><span class="sc">&lt;thead&gt;&lt;tr&gt;</span></div>
+<div id="SL218" class="sline"><span class="sln">218</span><span class="sc">  &lt;th data-c=&quot;0&quot;&gt;#&lt;span class=&quot;ar&quot;&gt;&lt;/span&gt;&lt;/th&gt;</span></div>
+<div id="SL219" class="sline"><span class="sln">219</span><span class="sc">  &lt;th data-c=&quot;1&quot;&gt;Score&lt;span class=&quot;ar&quot;&gt;&lt;/span&gt;&lt;/th&gt;</span></div>
+<div id="SL220" class="sline"><span class="sln">220</span><span class="sc">  &lt;th data-c=&quot;2&quot;&gt;Category&lt;span class=&quot;ar&quot;&gt;&lt;/span&gt;&lt;/th&gt;</span></div>
+<div id="SL221" class="sline"><span class="sln">221</span><span class="sc">  &lt;th data-c=&quot;3&quot;&gt;Folder&lt;span class=&quot;ar&quot;&gt;&lt;/span&gt;&lt;/th&gt;</span></div>
+<div id="SL222" class="sline"><span class="sln">222</span><span class="sc">  &lt;th data-c=&quot;4&quot;&gt;File&lt;span class=&quot;ar&quot;&gt;&lt;/span&gt;&lt;/th&gt;</span></div>
+<div id="SL223" class="sline"><span class="sln">223</span><span class="sc">  &lt;th data-c=&quot;5&quot;&gt;Ext&lt;span class=&quot;ar&quot;&gt;&lt;/span&gt;&lt;/th&gt;</span></div>
+<div id="SL224" class="sline"><span class="sln">224</span><span class="sc">  &lt;th data-c=&quot;6&quot;&gt;Modified&lt;span class=&quot;ar&quot;&gt;&lt;/span&gt;&lt;/th&gt;</span></div>
+<div id="SL225" class="sline"><span class="sln">225</span><span class="sc">  &lt;th data-c=&quot;7&quot;&gt;Chunk&lt;span class=&quot;ar&quot;&gt;&lt;/span&gt;&lt;/th&gt;</span></div>
+<div id="SL226" class="sline"><span class="sln">226</span><span class="sc">  &lt;th data-c=&quot;8&quot;&gt;Snippet&lt;span class=&quot;ar&quot;&gt;&lt;/span&gt;&lt;/th&gt;</span></div>
+<div id="SL227" class="sline"><span class="sln">227</span><span class="sc">&lt;/tr&gt;&lt;/thead&gt;</span></div>
+<div id="SL228" class="sline"><span class="sln">228</span><span class="sc">&lt;tbody&gt;</span></div>
+<div id="SL229" class="sline"><span class="sln">229</span><span class="sc">{&quot;&quot;.join(rows)}</span></div>
+<div id="SL230" class="sline"><span class="sln">230</span><span class="sc">&lt;/tbody&gt;&lt;/table&gt;</span></div>
+<div id="SL231" class="sline"><span class="sln">231</span><span class="sc">&lt;script&gt;</span></div>
+<div id="SL232" class="sline"><span class="sln">232</span><span class="sc">// ── Client-side interactivity ──</span></div>
+<div id="SL233" class="sline"><span class="sln">233</span><span class="sc">// Three features: (1) sort by column click, (2) live filter with highlight, (3) group-by-folder</span></div>
+<div id="SL234" class="sline"><span class="sln">234</span><span class="sc">const tb=document.querySelector(&#x27;#t tbody&#x27;),ths=document.querySelectorAll(&#x27;th&#x27;);</span></div>
+<div id="SL235" class="sline"><span class="sln">235</span><span class="sc">let sc=-1,asc=true;  // sc=current sort column index, asc=direction toggle</span></div>
+<div id="SL236" class="sline"><span class="sln">236</span><span class="sc">&nbsp;</span></div>
+<div id="SL237" class="sline"><span class="sln">237</span><span class="sc">// Feature 1: click column header to sort. Click same col twice → reverse direction.</span></div>
+<div id="SL238" class="sline"><span class="sln">238</span><span class="sc">ths.forEach(th=&gt;th.addEventListener(&#x27;click&#x27;,()=&gt;{{</span></div>
+<div id="SL239" class="sline"><span class="sln">239</span><span class="sc">  const c=+th.dataset.c;</span></div>
+<div id="SL240" class="sline"><span class="sln">240</span><span class="sc">  if(sc===c)asc=!asc;else{{sc=c;asc=true}}</span></div>
+<div id="SL241" class="sline"><span class="sln">241</span><span class="sc">  ths.forEach(h=&gt;h.querySelector(&#x27;.ar&#x27;).textContent=&#x27;&#x27;);</span></div>
+<div id="SL242" class="sline"><span class="sln">242</span><span class="sc">  th.querySelector(&#x27;.ar&#x27;).textContent=asc?&#x27;\\u25B2&#x27;:&#x27;\\u25BC&#x27;;</span></div>
+<div id="SL243" class="sline"><span class="sln">243</span><span class="sc">  const rs=[...tb.querySelectorAll(&#x27;tr&#x27;)];</span></div>
+<div id="SL244" class="sline"><span class="sln">244</span><span class="sc">  rs.sort((a,b)=&gt;{{</span></div>
+<div id="SL245" class="sline"><span class="sln">245</span><span class="sc">    let av=a.cells[c].dataset.val||a.cells[c].textContent;</span></div>
+<div id="SL246" class="sline"><span class="sln">246</span><span class="sc">    let bv=b.cells[c].dataset.val||b.cells[c].textContent;</span></div>
+<div id="SL247" class="sline"><span class="sln">247</span><span class="sc">    if(c&lt;=1||c===6){{av=parseFloat(av);bv=parseFloat(bv)}}</span></div>
+<div id="SL248" class="sline"><span class="sln">248</span><span class="sc">    return av&lt;bv?(asc?-1:1):av&gt;bv?(asc?1:-1):0;</span></div>
+<div id="SL249" class="sline"><span class="sln">249</span><span class="sc">  }});</span></div>
+<div id="SL250" class="sline"><span class="sln">250</span><span class="sc">  rs.forEach(r=&gt;tb.appendChild(r));</span></div>
+<div id="SL251" class="sline"><span class="sln">251</span><span class="sc">}}));</span></div>
+<div id="SL252" class="sline"><span class="sln">252</span><span class="sc">// Feature 2: live filter with match highlighting.</span></div>
+<div id="SL253" class="sline"><span class="sln">253</span><span class="sc">// We mutate innerHTML to wrap matches in &lt;span class=&quot;fhl&quot;&gt;, so we need to</span></div>
+<div id="SL254" class="sline"><span class="sln">254</span><span class="sc">// remember the ORIGINAL HTML to restore on each keystroke.</span></div>
+<div id="SL255" class="sline"><span class="sln">255</span><span class="sc">tb.querySelectorAll(&#x27;tr&#x27;).forEach(r=&gt;{{</span></div>
+<div id="SL256" class="sline"><span class="sln">256</span><span class="sc">  [...r.cells].forEach(c=&gt;{{ if(!c.dataset.orig) c.dataset.orig=c.innerHTML; }});</span></div>
+<div id="SL257" class="sline"><span class="sln">257</span><span class="sc">}});</span></div>
+<div id="SL258" class="sline"><span class="sln">258</span><span class="sc">document.getElementById(&#x27;f&#x27;).addEventListener(&#x27;input&#x27;,e=&gt;{{</span></div>
+<div id="SL259" class="sline"><span class="sln">259</span><span class="sc">  const q=e.target.value.trim();</span></div>
+<div id="SL260" class="sline"><span class="sln">260</span><span class="sc">  const ql=q.toLowerCase();</span></div>
+<div id="SL261" class="sline"><span class="sln">261</span><span class="sc">  tb.querySelectorAll(&#x27;tr&#x27;).forEach(r=&gt;{{</span></div>
+<div id="SL262" class="sline"><span class="sln">262</span><span class="sc">    // Restore original HTML first</span></div>
+<div id="SL263" class="sline"><span class="sln">263</span><span class="sc">    [...r.cells].forEach(c=&gt;{{ if(c.dataset.orig) c.innerHTML=c.dataset.orig; }});</span></div>
+<div id="SL264" class="sline"><span class="sln">264</span><span class="sc">    if(!q){{</span></div>
+<div id="SL265" class="sline"><span class="sln">265</span><span class="sc">      r.classList.remove(&#x27;hidden&#x27;);</span></div>
+<div id="SL266" class="sline"><span class="sln">266</span><span class="sc">      return;</span></div>
+<div id="SL267" class="sline"><span class="sln">267</span><span class="sc">    }}</span></div>
+<div id="SL268" class="sline"><span class="sln">268</span><span class="sc">    const visible = r.textContent.toLowerCase().includes(ql);</span></div>
+<div id="SL269" class="sline"><span class="sln">269</span><span class="sc">    r.classList.toggle(&#x27;hidden&#x27;, !visible);</span></div>
+<div id="SL270" class="sline"><span class="sln">270</span><span class="sc">    // Highlight matches in visible rows</span></div>
+<div id="SL271" class="sline"><span class="sln">271</span><span class="sc">    if(visible){{</span></div>
+<div id="SL272" class="sline"><span class="sln">272</span><span class="sc">      const re = new RegExp(&#x27;(&#x27;+q.replace(/[.*+?^$\\{{}}()|[\]\\\\]/g,&#x27;\\\\$&amp;&#x27;)+&#x27;)&#x27;,&#x27;gi&#x27;);</span></div>
+<div id="SL273" class="sline"><span class="sln">273</span><span class="sc">      [...r.cells].forEach(c=&gt;{{</span></div>
+<div id="SL274" class="sline"><span class="sln">274</span><span class="sc">        // Walk text nodes only, skip inside tags</span></div>
+<div id="SL275" class="sline"><span class="sln">275</span><span class="sc">        const walker = document.createTreeWalker(c, NodeFilter.SHOW_TEXT, null);</span></div>
+<div id="SL276" class="sline"><span class="sln">276</span><span class="sc">        const nodes = [];</span></div>
+<div id="SL277" class="sline"><span class="sln">277</span><span class="sc">        let n;</span></div>
+<div id="SL278" class="sline"><span class="sln">278</span><span class="sc">        while(n = walker.nextNode()) nodes.push(n);</span></div>
+<div id="SL279" class="sline"><span class="sln">279</span><span class="sc">        nodes.forEach(node=&gt;{{</span></div>
+<div id="SL280" class="sline"><span class="sln">280</span><span class="sc">          if(re.test(node.textContent)){{</span></div>
+<div id="SL281" class="sline"><span class="sln">281</span><span class="sc">            const span = document.createElement(&#x27;span&#x27;);</span></div>
+<div id="SL282" class="sline"><span class="sln">282</span><span class="sc">            span.innerHTML = node.textContent.replace(re,&#x27;&lt;span class=&quot;fhl&quot;&gt;$1&lt;/span&gt;&#x27;);</span></div>
+<div id="SL283" class="sline"><span class="sln">283</span><span class="sc">            node.parentNode.replaceChild(span, node);</span></div>
+<div id="SL284" class="sline"><span class="sln">284</span><span class="sc">          }}</span></div>
+<div id="SL285" class="sline"><span class="sln">285</span><span class="sc">        }});</span></div>
+<div id="SL286" class="sline"><span class="sln">286</span><span class="sc">      }});</span></div>
+<div id="SL287" class="sline"><span class="sln">287</span><span class="sc">    }}</span></div>
+<div id="SL288" class="sline"><span class="sln">288</span><span class="sc">  }});</span></div>
+<div id="SL289" class="sline"><span class="sln">289</span><span class="sc">}});</span></div>
+<div id="SL290" class="sline"><span class="sln">290</span><span class="sc">// Feature 3: &quot;Group by folder&quot; toggle. Sorts by folder column, greys out duplicate</span></div>
+<div id="SL291" class="sline"><span class="sln">291</span><span class="sc">// folder cells (visual grouping without collapsing rows).</span></div>
+<div id="SL292" class="sline"><span class="sln">292</span><span class="sc">let grouped=false;</span></div>
+<div id="SL293" class="sline"><span class="sln">293</span><span class="sc">document.getElementById(&#x27;gf&#x27;).addEventListener(&#x27;click&#x27;,function(){{</span></div>
+<div id="SL294" class="sline"><span class="sln">294</span><span class="sc">  grouped=!grouped;</span></div>
+<div id="SL295" class="sline"><span class="sln">295</span><span class="sc">  this.classList.toggle(&#x27;active&#x27;,grouped);</span></div>
+<div id="SL296" class="sline"><span class="sln">296</span><span class="sc">  if(grouped){{</span></div>
+<div id="SL297" class="sline"><span class="sln">297</span><span class="sc">    sc=3;asc=true;</span></div>
+<div id="SL298" class="sline"><span class="sln">298</span><span class="sc">    ths[3].querySelector(&#x27;.ar&#x27;).textContent=&#x27;\\u25B2&#x27;;</span></div>
+<div id="SL299" class="sline"><span class="sln">299</span><span class="sc">    const rs=[...tb.querySelectorAll(&#x27;tr&#x27;)];</span></div>
+<div id="SL300" class="sline"><span class="sln">300</span><span class="sc">    rs.sort((a,b)=&gt;{{</span></div>
+<div id="SL301" class="sline"><span class="sln">301</span><span class="sc">      const av=a.cells[3].dataset.val,bv=b.cells[3].dataset.val;</span></div>
+<div id="SL302" class="sline"><span class="sln">302</span><span class="sc">      return av&lt;bv?-1:av&gt;bv?1:0;</span></div>
+<div id="SL303" class="sline"><span class="sln">303</span><span class="sc">    }});</span></div>
+<div id="SL304" class="sline"><span class="sln">304</span><span class="sc">    rs.forEach(r=&gt;tb.appendChild(r));</span></div>
+<div id="SL305" class="sline"><span class="sln">305</span><span class="sc">    let prev=&#x27;&#x27;;</span></div>
+<div id="SL306" class="sline"><span class="sln">306</span><span class="sc">    rs.forEach(r=&gt;{{</span></div>
+<div id="SL307" class="sline"><span class="sln">307</span><span class="sc">      const f=r.cells[3].dataset.val;</span></div>
+<div id="SL308" class="sline"><span class="sln">308</span><span class="sc">      if(f===prev)r.cells[3].style.color=&#x27;#45475a&#x27;;</span></div>
+<div id="SL309" class="sline"><span class="sln">309</span><span class="sc">      else r.cells[3].style.color=&#x27;&#x27;;</span></div>
+<div id="SL310" class="sline"><span class="sln">310</span><span class="sc">      prev=f;</span></div>
+<div id="SL311" class="sline"><span class="sln">311</span><span class="sc">    }});</span></div>
+<div id="SL312" class="sline"><span class="sln">312</span><span class="sc">  }}else{{</span></div>
+<div id="SL313" class="sline"><span class="sln">313</span><span class="sc">    tb.querySelectorAll(&#x27;tr&#x27;).forEach(r=&gt;r.cells[3].style.color=&#x27;&#x27;);</span></div>
+<div id="SL314" class="sline"><span class="sln">314</span><span class="sc">    sc=0;asc=true;</span></div>
+<div id="SL315" class="sline"><span class="sln">315</span><span class="sc">    ths[0].querySelector(&#x27;.ar&#x27;).textContent=&#x27;\\u25B2&#x27;;</span></div>
+<div id="SL316" class="sline"><span class="sln">316</span><span class="sc">    const rs=[...tb.querySelectorAll(&#x27;tr&#x27;)];</span></div>
+<div id="SL317" class="sline"><span class="sln">317</span><span class="sc">    rs.sort((a,b)=&gt;+a.cells[0].dataset.val - +b.cells[0].dataset.val);</span></div>
+<div id="SL318" class="sline"><span class="sln">318</span><span class="sc">    rs.forEach(r=&gt;tb.appendChild(r));</span></div>
+<div id="SL319" class="sline"><span class="sln">319</span><span class="sc">  }}</span></div>
+<div id="SL320" class="sline"><span class="sln">320</span><span class="sc">}});</span></div>
+<div id="SL321" class="sline"><span class="sln">321</span><span class="sc">&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;&#x27;&#x27;&#x27;</span></div>
+<div id="SL322" class="sline"><span class="sln">322</span><span class="sc">&nbsp;</span></div>
+<div id="SL323" class="sline"><span class="sln">323</span><span class="sc">with open(&#x27;/tmp/dsearch_results.html&#x27;, &#x27;w&#x27;) as f:</span></div>
+<div id="SL324" class="sline"><span class="sln">324</span><span class="sc">    f.write(page)</span></div>
+<div id="SL325" class="sline"><span class="sln">325</span><span class="sc">print(f&#x27;Wrote {len(rows)} results to /tmp/dsearch_results.html&#x27;)</span></div>
+<div id="SL326" class="sline"><span class="sln">326</span><span class="sc">PYEOF</span></div>
+<div id="SL327" class="sline"><span class="sln">327</span><span class="sc">    # Launch browser in background — lets the shell return immediately</span></div>
+<div id="SL328" class="sline"><span class="sln">328</span><span class="sc">    xdg-open /tmp/dsearch_results.html 2&gt;/dev/null &amp;</span></div>
+<div id="SL329" class="sline"><span class="sln">329</span><span class="sc">else</span></div>
+<div id="SL330" class="sline"><span class="sln">330</span><span class="sc">    # ── Terminal color mode (default — no flags) ─────────────────</span></div>
+<div id="SL331" class="sline"><span class="sln">331</span><span class="sc">    # Runs Python inline via -c. Uses ANSI color codes for terminal output.</span></div>
+<div id="SL332" class="sline"><span class="sln">332</span><span class="sc">    $VENV_GTE -c &quot;</span></div>
+<div id="SL333" class="sline"><span class="sln">333</span><span class="sc">import sys, os, re, cohere, chromadb</span></div>
+<div id="SL334" class="sline"><span class="sln">334</span><span class="sc">&nbsp;</span></div>
+<div id="SL335" class="sline"><span class="sln">335</span><span class="sc"># Same embed + query path as HTML mode, just simpler output</span></div>
+<div id="SL336" class="sline"><span class="sln">336</span><span class="sc">q = sys.argv[1]</span></div>
+<div id="SL337" class="sline"><span class="sln">337</span><span class="sc">n = int(sys.argv[2])</span></div>
+<div id="SL338" class="sline"><span class="sln">338</span><span class="sc">co = cohere.ClientV2(api_key=os.environ[&#x27;COHERE_API_KEY&#x27;])</span></div>
+<div id="SL339" class="sline"><span class="sln">339</span><span class="sc">resp = co.embed(texts=[q], model=&#x27;embed-multilingual-v3.0&#x27;, input_type=&#x27;search_query&#x27;, embedding_types=[&#x27;float&#x27;])</span></div>
+<div id="SL340" class="sline"><span class="sln">340</span><span class="sc">col = chromadb.PersistentClient(path=&#x27;$CHROMADB_DIR&#x27;).get_collection(&#x27;fulldisk&#x27;)</span></div>
+<div id="SL341" class="sline"><span class="sln">341</span><span class="sc">results = col.query(query_embeddings=resp.embeddings.float_, n_results=n)</span></div>
+<div id="SL342" class="sline"><span class="sln">342</span><span class="sc">&nbsp;</span></div>
+<div id="SL343" class="sline"><span class="sln">343</span><span class="sc"># ANSI escape codes for terminal colors</span></div>
+<div id="SL344" class="sline"><span class="sln">344</span><span class="sc">RST = &#x27;\033[0m&#x27;   # Reset all formatting</span></div>
+<div id="SL345" class="sline"><span class="sln">345</span><span class="sc">BOLD = &#x27;\033[1m&#x27;</span></div>
+<div id="SL346" class="sline"><span class="sln">346</span><span class="sc">DIM = &#x27;\033[2m&#x27;</span></div>
+<div id="SL347" class="sline"><span class="sln">347</span><span class="sc">RED = &#x27;\033[31m&#x27;  # Low score (&lt;0.5)</span></div>
+<div id="SL348" class="sline"><span class="sln">348</span><span class="sc">GRN = &#x27;\033[32m&#x27;  # High score (&gt;=0.6)</span></div>
+<div id="SL349" class="sline"><span class="sln">349</span><span class="sc">YLW = &#x27;\033[33m&#x27;  # Medium score (&gt;=0.5)</span></div>
+<div id="SL350" class="sline"><span class="sln">350</span><span class="sc">BLU = &#x27;\033[34m&#x27;  # Paths</span></div>
+<div id="SL351" class="sline"><span class="sln">351</span><span class="sc">BYLW = &#x27;\033[1;33m&#x27;  # bold yellow — used to highlight query matches in snippets</span></div>
+<div id="SL352" class="sline"><span class="sln">352</span><span class="sc">&nbsp;</span></div>
+<div id="SL353" class="sline"><span class="sln">353</span><span class="sc"># Build regex for query-word highlighting in snippets (word-boundary aware for Greek)</span></div>
+<div id="SL354" class="sline"><span class="sln">354</span><span class="sc">words = [w for w in q.split() if len(w) &gt; 2]</span></div>
+<div id="SL355" class="sline"><span class="sln">355</span><span class="sc">pat = re.compile(r&#x27;\b(&#x27; + &#x27;|&#x27;.join(re.escape(w) for w in words) + r&#x27;)\b&#x27;, re.IGNORECASE) if words else None</span></div>
+<div id="SL356" class="sline"><span class="sln">356</span><span class="sc">&nbsp;</span></div>
+<div id="SL357" class="sline"><span class="sln">357</span><span class="sc">import time as _t</span></div>
+<div id="SL358" class="sline"><span class="sln">358</span><span class="sc">for i, (doc, meta, dist) in enumerate(zip(results[&#x27;documents&#x27;][0], results[&#x27;metadatas&#x27;][0], results[&#x27;distances&#x27;][0])):</span></div>
+<div id="SL359" class="sline"><span class="sln">359</span><span class="sc">    score = 1 - dist</span></div>
+<div id="SL360" class="sline"><span class="sln">360</span><span class="sc">    sc = GRN if score &gt;= 0.6 else (YLW if score &gt;= 0.5 else RED)</span></div>
+<div id="SL361" class="sline"><span class="sln">361</span><span class="sc">    ext = meta.get(&#x27;ext&#x27;, &#x27;&#x27;)</span></div>
+<div id="SL362" class="sline"><span class="sln">362</span><span class="sc">    cat = meta.get(&#x27;folder&#x27;, &#x27;&#x27;)</span></div>
+<div id="SL363" class="sline"><span class="sln">363</span><span class="sc">    cidx = meta.get(&#x27;chunk_idx&#x27;, 0)</span></div>
+<div id="SL364" class="sline"><span class="sln">364</span><span class="sc">    ctot = meta.get(&#x27;total_chunks&#x27;, 1)</span></div>
+<div id="SL365" class="sline"><span class="sln">365</span><span class="sc">    try: mdate = _t.strftime(&#x27;%Y-%m-%d&#x27;, _t.localtime(int(meta.get(&#x27;mtime&#x27;,&#x27;0&#x27;))))</span></div>
+<div id="SL366" class="sline"><span class="sln">366</span><span class="sc">    except: mdate = &#x27;?&#x27;</span></div>
+<div id="SL367" class="sline"><span class="sln">367</span><span class="sc">    tag = f&#x27;{DIM}[{cat}] {ext} {mdate} chunk {cidx}/{ctot}{RST}&#x27;</span></div>
+<div id="SL368" class="sline"><span class="sln">368</span><span class="sc">    print(f&#x27;{BOLD}{i+1}.{RST} {sc}[{score:.3f}]{RST} {BLU}{meta[\&quot;path\&quot;]}{RST}&#x27;)</span></div>
+<div id="SL369" class="sline"><span class="sln">369</span><span class="sc">    print(f&#x27;   {tag}&#x27;)</span></div>
+<div id="SL370" class="sline"><span class="sln">370</span><span class="sc">    snippet = doc[:200]</span></div>
+<div id="SL371" class="sline"><span class="sln">371</span><span class="sc">    if pat:</span></div>
+<div id="SL372" class="sline"><span class="sln">372</span><span class="sc">        snippet = pat.sub(lambda m: f&#x27;{BYLW}{m.group()}{RST}{DIM}&#x27;, snippet)</span></div>
+<div id="SL373" class="sline"><span class="sln">373</span><span class="sc">    print(f&#x27;   {DIM}{snippet}{RST}&#x27;)</span></div>
+<div id="SL374" class="sline"><span class="sln">374</span><span class="sc">    print()</span></div>
+<div id="SL375" class="sline"><span class="sln">375</span><span class="sc">&quot; &quot;$QUERY&quot; &quot;$NRESULTS&quot; 2&gt;/dev/null</span></div>
+<div id="SL376" class="sline"><span class="sln">376</span><span class="sc">fi</span></div>
+<div id="SL377" class="sline"><span class="sln">377</span><span class="sc">&nbsp;</span></div>
+  </div>
+</div>
+
+<!-- Hero -->
+<div class="hero"><div class="hero-inner">
+  <h1>d<span>search</span> — control flow</h1>
+  <div class="tagline">semantic-disk-search/scripts/dsearch · click any node to open the source on the right</div>
+  <div class="chips">
+    <div class="chip"><b>377</b> lines</div>
+    <div class="chip"><b>3</b> modes</div>
+    <div class="chip"><b>18</b> linked nodes</div>
+    <div class="chip accent">bash · Cohere embed-v3 + ChromaDB</div>
+  </div>
+</div></div>
+
+<!-- Main diagram -->
+<div class="main">
+  <div class="diagram-box">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 1400 1240" width="1400" height="1240"
+     font-family="'Segoe UI',system-ui,sans-serif">
+  <title>dsearch — control flow</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#89b4fa"/>
+    </marker>
+    <style><![CDATA[
+      .bg { fill:#1e1e2e; }
+      rect.box { fill:#313244; stroke:#89b4fa; stroke-width:1.5; }
+      rect.note { fill:#181825; stroke:#45475a; stroke-width:1; stroke-dasharray:3 3; }
+      polygon.diamond { fill:#313244; stroke:#f9e2af; stroke-width:1.5; }
+      rect.term { fill:#313244; stroke:#a6e3a1; stroke-width:1.8; }
+      rect.group { fill:none; stroke:#45475a; stroke-width:1; stroke-dasharray:5 4; }
+      path.arr, line.arr { stroke:#89b4fa; stroke-width:1.5; fill:none; marker-end:url(#arrow); }
+      text { fill:#cdd6f4; font-size:13px; text-anchor:middle; }
+      text.title { fill:#89b4fa; font-size:20px; font-weight:bold; }
+      text.subtitle { fill:#6c7086; font-size:11px; }
+      text.sub { fill:#cba6f7; font-size:14px; font-weight:bold; }
+      text.mono { font-family:'DejaVu Sans Mono','Menlo',monospace; font-size:11px; fill:#94e2d5; }
+      text.note { font-family:'DejaVu Sans Mono','Menlo',monospace; font-size:11px; fill:#a6adc8; }
+      text.label { font-size:11px; fill:#f9e2af; }
+      a { cursor:pointer; }
+      a:hover rect.box { stroke:#f38ba8; stroke-width:2.5; fill:#45475a; }
+      a:hover polygon.diamond { stroke:#f38ba8; stroke-width:2.5; fill:#45475a; }
+    ]]></style>
+  </defs>
+
+  <rect class="bg" width="100%" height="100%"/>
+
+  <!-- Title -->
+  <text x="700" y="30" class="title">dsearch — control flow</text>
+  <text x="700" y="50" class="subtitle">semantic-disk-search/scripts/dsearch  ·  click any node to jump to the highlighted line range</text>
+
+  <!-- ─────────── HEADER FLOW ─────────── -->
+
+  <!-- Start terminal -->
+  <rect class="term" x="610" y="70" width="180" height="38" rx="19" ry="19"/>
+  <text x="700" y="94">dsearch invoked</text>
+
+  <!-- Load env L34 -->
+  <a onclick="showLines(34,34);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="560" y="135" width="280" height="52" rx="8" ry="8"/>
+    <text x="700" y="157">Load ~/.config/dsearch/.env</text>
+    <text x="700" y="175" class="mono">L34 · COHERE_API_KEY</text>
+  </a>
+
+  <!-- Parse args L63-78 -->
+  <a onclick="showLines(63,78);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="560" y="210" width="280" height="52" rx="8" ry="8"/>
+    <text x="700" y="232">Parse args: -n -w -CL… -deep -h</text>
+    <text x="700" y="250" class="mono">L63–L78</text>
+  </a>
+
+  <!-- Usage exit L36-61 -->
+  <a onclick="showLines(36,61);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="980" y="210" width="180" height="52" rx="8" ry="8"/>
+    <text x="1070" y="232">usage() → exit</text>
+    <text x="1070" y="250" class="mono">L36–L61</text>
+  </a>
+
+  <!-- QUERY empty? diamond L79-81 -->
+  <a onclick="showLines(79,81);return false" href="#code-panel" style="cursor:pointer">
+    <polygon class="diamond" points="700,287 835,325 700,363 565,325"/>
+    <text x="700" y="321">QUERY empty?</text>
+    <text x="700" y="338" class="mono">L79–L81</text>
+  </a>
+
+  <!-- Prompt read L81 -->
+  <a onclick="showLines(81,81);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="895" y="300" width="180" height="50" rx="8" ry="8"/>
+    <text x="985" y="321">read -p 'Query: '</text>
+    <text x="985" y="339" class="mono">L81</text>
+  </a>
+
+  <!-- Mode dispatch diamond L83-84 -->
+  <a onclick="showLines(83,84);return false" href="#code-panel" style="cursor:pointer">
+    <polygon class="diamond" points="700,388 845,440 700,492 555,440"/>
+    <text x="700" y="436">Mode dispatch</text>
+    <text x="700" y="454" class="mono">L83–L84</text>
+  </a>
+
+  <!-- Header-flow arrows -->
+  <line class="arr" x1="700" y1="108" x2="700" y2="133"/>
+  <line class="arr" x1="700" y1="187" x2="700" y2="208"/>
+  <path class="arr" d="M840,236 L978,236"/>
+  <text x="910" y="228" class="label">-h</text>
+  <line class="arr" x1="700" y1="262" x2="700" y2="287"/>
+  <path class="arr" d="M835,325 L893,325"/>
+  <text x="862" y="318" class="label">empty</text>
+  <line class="arr" x1="700" y1="363" x2="700" y2="388"/>
+  <text x="718" y="382" class="label">ok</text>
+  <path class="arr" d="M985,350 L985,440 L847,440"/>
+
+  <!-- ─────────── SUBGRAPH BOXES ─────────── -->
+  <rect class="group" x="40" y="515" width="380" height="345" rx="10" ry="10"/>
+  <text x="230" y="537" class="sub">Answer mode (-CLexpand-CLrank-CLanswer)</text>
+
+  <rect class="group" x="500" y="515" width="400" height="625" rx="10" ry="10"/>
+  <text x="700" y="537" class="sub">HTML mode (-w)</text>
+
+  <rect class="group" x="1000" y="515" width="360" height="410" rx="10" ry="10"/>
+  <text x="1180" y="537" class="sub">Terminal mode (default)</text>
+
+  <!-- ─────────── DISPATCH BRANCHES ─────────── -->
+  <path class="arr" d="M555,440 L230,440 L230,560"/>
+  <text x="390" y="432" class="label">-CLexpand-CLrank-CLanswer  (forces NRESULTS=100)</text>
+
+  <line class="arr" x1="700" y1="492" x2="700" y2="560"/>
+  <text x="722" y="527" class="label">-w</text>
+
+  <path class="arr" d="M845,440 L1180,440 L1180,560"/>
+  <text x="1010" y="432" class="label">default</text>
+
+  <!-- ─────────── ANSWER MODE ─────────── -->
+  <!-- A1: exec dsearch-answer L84-87 -->
+  <a onclick="showLines(84,87);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="65" y="560" width="330" height="72" rx="8" ry="8"/>
+    <text x="230" y="584">exec python3 dsearch-answer</text>
+    <text x="230" y="603" class="mono">$DEEPMODE "$QUERY" "$NRESULTS"</text>
+    <text x="230" y="621" class="mono">L84–L87</text>
+  </a>
+
+  <!-- A2: pipeline note (non-link, describes dsearch-answer) -->
+  <rect class="note" x="65" y="655" width="330" height="190" rx="8" ry="8"/>
+  <text x="230" y="678" class="note">6-step pipeline (in dsearch-answer):</text>
+  <text x="230" y="700" class="note">① expand query (Claude)</text>
+  <text x="230" y="720" class="note">② embed + fetch 100 files</text>
+  <text x="230" y="740" class="note">③ 10 parallel Claude rankers</text>
+  <text x="230" y="760" class="note">④ aggregate → top 15 originals</text>
+  <text x="230" y="780" class="note">⑤ final Claude reads &amp; cites</text>
+  <text x="230" y="800" class="note">⑥ print ANSWER + SOURCES</text>
+  <text x="230" y="828" class="mono" fill="#6c7086">(+ -deep: multi-hop loop ×3)</text>
+
+  <line class="arr" x1="230" y1="632" x2="230" y2="655"/>
+
+  <!-- ─────────── HTML MODE ─────────── -->
+  <!-- W1 export env L91-92 -->
+  <a onclick="showLines(91,92);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="540" y="560" width="320" height="50" rx="8" ry="8"/>
+    <text x="700" y="581">export DSEARCH_QUERY / DSEARCH_N</text>
+    <text x="700" y="599" class="mono">L91–L92</text>
+  </a>
+
+  <!-- W2 python heredoc L93 -->
+  <a onclick="showLines(93,93);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="540" y="625" width="320" height="40" rx="8" ry="8"/>
+    <text x="700" y="650">python3 &lt;&lt;PYEOF  ·  L93</text>
+  </a>
+
+  <!-- W3 cohere embed L96-104 -->
+  <a onclick="showLines(96,104);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="540" y="680" width="320" height="62" rx="8" ry="8"/>
+    <text x="700" y="701">cohere.ClientV2.embed</text>
+    <text x="700" y="719" class="mono">embed-multilingual-v3.0</text>
+    <text x="700" y="735" class="mono">L96–L104</text>
+  </a>
+
+  <!-- W4 chromadb query L107-109 -->
+  <a onclick="showLines(107,109);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="540" y="758" width="320" height="67" rx="8" ry="8"/>
+    <text x="700" y="779">ChromaDB query</text>
+    <text x="700" y="797" class="mono">$CHROMADB_DIR</text>
+    <text x="700" y="813" class="mono">L107–L109 · 941K chunks</text>
+  </a>
+
+  <!-- W5 build rows L138-165 -->
+  <a onclick="showLines(138,165);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="540" y="840" width="320" height="62" rx="8" ry="8"/>
+    <text x="700" y="861">Build rows · highlight query</text>
+    <text x="700" y="879" class="mono">score, path, snippet, ext, mtime</text>
+    <text x="700" y="895" class="mono">L138–L165</text>
+  </a>
+
+  <!-- W6 assemble HTML L170-230 -->
+  <a onclick="showLines(170,230);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="540" y="918" width="320" height="55" rx="8" ry="8"/>
+    <text x="700" y="939">Assemble HTML page</text>
+    <text x="700" y="957" class="mono">Catppuccin · L170–L230</text>
+  </a>
+
+  <!-- W7 JS sort/filter/group L232-320 -->
+  <a onclick="showLines(232,320);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="540" y="988" width="320" height="55" rx="8" ry="8"/>
+    <text x="700" y="1009">JS: sort · filter · group-by-folder</text>
+    <text x="700" y="1027" class="mono">L232–L320</text>
+  </a>
+
+  <!-- W8 write + xdg-open L323-328 -->
+  <a onclick="showLines(323,328);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="540" y="1058" width="320" height="60" rx="8" ry="8"/>
+    <text x="700" y="1080">Write /tmp/dsearch_results.html</text>
+    <text x="700" y="1098" class="mono">xdg-open &amp; · L323–L328</text>
+  </a>
+
+  <!-- HTML arrows -->
+  <line class="arr" x1="700" y1="610" x2="700" y2="625"/>
+  <line class="arr" x1="700" y1="665" x2="700" y2="680"/>
+  <line class="arr" x1="700" y1="742" x2="700" y2="758"/>
+  <line class="arr" x1="700" y1="825" x2="700" y2="840"/>
+  <line class="arr" x1="700" y1="902" x2="700" y2="918"/>
+  <line class="arr" x1="700" y1="973" x2="700" y2="988"/>
+  <line class="arr" x1="700" y1="1043" x2="700" y2="1058"/>
+
+  <!-- ─────────── TERMINAL MODE ─────────── -->
+  <!-- T1 python -c L332 -->
+  <a onclick="showLines(332,332);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="1020" y="560" width="320" height="50" rx="8" ry="8"/>
+    <text x="1180" y="581">python3 -c '…' "$QUERY" "$NRESULTS"</text>
+    <text x="1180" y="599" class="mono">L332</text>
+  </a>
+
+  <!-- T2 embed + chromadb L338-341 -->
+  <a onclick="showLines(338,341);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="1020" y="625" width="320" height="65" rx="8" ry="8"/>
+    <text x="1180" y="646">Cohere embed + ChromaDB query</text>
+    <text x="1180" y="664" class="mono">same 'fulldisk' collection</text>
+    <text x="1180" y="680" class="mono">L338–L341</text>
+  </a>
+
+  <!-- T3 ANSI + regex L344-355 -->
+  <a onclick="showLines(344,355);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="1020" y="705" width="320" height="60" rx="8" ry="8"/>
+    <text x="1180" y="726">ANSI colors + word-hl regex</text>
+    <text x="1180" y="744" class="mono">GRN/YLW/RED · L344–L355</text>
+  </a>
+
+  <!-- T4 loop + print L358-374 -->
+  <a onclick="showLines(358,374);return false" href="#code-panel" style="cursor:pointer">
+    <rect class="box" x="1020" y="780" width="320" height="100" rx="8" ry="8"/>
+    <text x="1180" y="801">Loop results → print</text>
+    <text x="1180" y="819" class="mono">score colour · path (blue)</text>
+    <text x="1180" y="835" class="mono">tag (cat/ext/date/chunk)</text>
+    <text x="1180" y="851" class="mono">snippet with query hits</text>
+    <text x="1180" y="867" class="mono">L358–L374</text>
+  </a>
+
+  <!-- Terminal arrows -->
+  <line class="arr" x1="1180" y1="610" x2="1180" y2="625"/>
+  <line class="arr" x1="1180" y1="690" x2="1180" y2="705"/>
+  <line class="arr" x1="1180" y1="765" x2="1180" y2="780"/>
+
+  <!-- ─────────── END ─────────── -->
+  <rect class="term" x="610" y="1180" width="180" height="38" rx="19" ry="19"/>
+  <text x="700" y="1204">done</text>
+
+  <!-- Converge arrows -->
+  <path class="arr" d="M230,845 L230,1199 L608,1199"/>
+  <line class="arr" x1="700" y1="1118" x2="700" y2="1180"/>
+  <path class="arr" d="M1180,880 L1180,1199 L792,1199"/>
+
+  <!-- Legend -->
+  <g transform="translate(40, 1170)">
+    <rect class="box" x="0" y="0" width="22" height="14" rx="3" ry="3"/>
+    <text x="32" y="11" text-anchor="start" font-size="11" fill="#a6adc8">step (click → source)</text>
+    <polygon class="diamond" points="160,7 175,0 190,7 175,14"/>
+    <text x="200" y="11" text-anchor="start" font-size="11" fill="#a6adc8">decision</text>
+    <rect class="term" x="270" y="0" width="22" height="14" rx="7" ry="7"/>
+    <text x="302" y="11" text-anchor="start" font-size="11" fill="#a6adc8">start/end</text>
+    <rect class="note" x="370" y="0" width="22" height="14" rx="3" ry="3"/>
+    <text x="402" y="11" text-anchor="start" font-size="11" fill="#a6adc8">note (not linked)</text>
+  </g>
+</svg>
+
+  </div>
+  <div class="hint">
+    Click any step → source slides in on the right ·
+    <kbd>Esc</kbd> to close ·
+    <kbd>Ctrl</kbd>+scroll inside the SVG to zoom
+  </div>
+</div>
+
+<script>
+function showLines(start, end) {
+  document.querySelectorAll('.sline.hl, .sline.target').forEach(el => el.classList.remove('hl','target'));
+  const lo = Math.min(start, end), hi = Math.max(start, end);
+  for (let i = lo; i <= hi; i++) {
+    const el = document.getElementById('SL' + i);
+    if (el) el.classList.add('hl');
+  }
+  const first = document.getElementById('SL' + lo);
+  if (first) {
+    first.classList.add('target');
+    const body = document.getElementById('code-panel-body');
+    body.scrollTop = first.offsetTop - body.clientHeight / 3;
+  }
+  document.getElementById('code-panel-title').textContent =
+    'dsearch — line' + (lo === hi ? ' ' + lo : 's ' + lo + '–' + hi);
+  document.getElementById('code-panel').classList.add('open');
+  document.body.classList.add('panel-open');
+}
+function closeCodePanel() {
+  document.getElementById('code-panel').classList.remove('open');
+  document.body.classList.remove('panel-open');
+}
+document.getElementById('code-panel-close').onclick = closeCodePanel;
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCodePanel();
+});
+
+// ── Resizable split: drag the left edge of the code panel to adjust widths ──
+(function setupResizer() {
+  const panel = document.getElementById('code-panel');
+  const resizer = document.getElementById('resizer');
+  const body = document.body;
+  let dragging = false;
+
+  // Load saved width from localStorage
+  const saved = localStorage.getItem('dsearch.panelWidth');
+  if (saved) {
+    const pct = parseFloat(saved);
+    if (pct > 25 && pct < 85) {
+      panel.style.width = pct + '%';
+      const style = document.createElement('style');
+      style.textContent = `body.panel-open { padding-right: ${pct + 1}%; }`;
+      document.head.appendChild(style);
+    }
+  }
+
+  resizer.addEventListener('mousedown', e => {
+    e.preventDefault();
+    dragging = true;
+    panel.classList.add('resizing');
+    body.classList.add('resizing');
+    resizer.classList.add('active');
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const vw = window.innerWidth;
+    const fromRight = vw - e.clientX;
+    const pct = (fromRight / vw) * 100;
+    if (pct < 25 || pct > 85) return;
+    panel.style.width = pct + '%';
+    body.style.paddingRight = (pct + 1) + '%';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    panel.classList.remove('resizing');
+    body.classList.remove('resizing');
+    resizer.classList.remove('active');
+    const pct = parseFloat(panel.style.width);
+    if (!isNaN(pct)) localStorage.setItem('dsearch.panelWidth', pct.toString());
+  });
+})();
+</script>
+</body></html>

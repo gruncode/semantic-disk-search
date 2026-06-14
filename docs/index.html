@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>dsearch docs</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#1e1e2e;--bg2:#181825;--surface:#313244;--overlay:#45475a;
+  --text:#cdd6f4;--subtext:#a6adc8;--dim:#6c7086;
+  --blue:#89b4fa;--green:#a6e3a1;--yellow:#f9e2af;--red:#f38ba8;
+  --mauve:#cba6f7;--teal:#94e2d5;--pink:#f5c2e7;
+  --mono:'JetBrains Mono',monospace;--sans:'DM Sans',system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.65;overflow-x:hidden}
+
+/* ── HERO ─────────────────────────────── */
+.hero{position:relative;padding:50px 40px 40px;background:var(--bg2);border-bottom:1px solid var(--overlay);overflow:hidden}
+.hero::before{content:'';position:absolute;top:-80px;right:-80px;width:400px;height:400px;background:radial-gradient(circle,rgba(137,180,250,.08) 0%,transparent 70%);pointer-events:none}
+.hero::after{content:'';position:absolute;bottom:-60px;left:20%;width:300px;height:300px;background:radial-gradient(circle,rgba(203,166,247,.06) 0%,transparent 70%);pointer-events:none}
+.hero-inner{max-width:1000px;margin:0 auto;position:relative;z-index:1}
+.hero h1{font-family:var(--mono);font-size:2.8em;font-weight:700;color:var(--blue);letter-spacing:-.02em}
+.hero h1 span{color:var(--mauve)}
+.hero .tagline{color:var(--subtext);font-size:1.05em;margin-top:6px}
+.chips{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+.chip{background:var(--surface);border:1px solid var(--overlay);padding:6px 14px;border-radius:20px;font-size:.8em;font-family:var(--mono);display:flex;align-items:center;gap:6px}
+.chip b{color:var(--green)}
+.chip.accent{border-color:var(--blue);color:var(--blue)}
+
+/* ── NAV ──────────────────────────────── */
+.nav{background:var(--surface);border-bottom:1px solid var(--overlay);position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
+.nav-inner{max-width:1000px;margin:0 auto;display:flex;gap:4px;padding:8px 40px;overflow-x:auto}
+.nav a{color:var(--dim);font-size:.78em;font-family:var(--mono);padding:6px 12px;border-radius:6px;text-decoration:none;white-space:nowrap;transition:all .15s}
+.nav a:hover,.nav a.active{color:var(--blue);background:var(--bg)}
+
+/* ── MAIN ─────────────────────────────── */
+.main{max-width:1000px;margin:0 auto;padding:24px 40px 60px}
+
+/* ── QUICKSTART ───────────────────────── */
+.qs{background:var(--bg2);border:1px solid var(--overlay);border-radius:12px;padding:24px 28px;margin-bottom:32px;position:relative}
+.qs::before{content:'$';position:absolute;top:24px;left:28px;color:var(--dim);font-family:var(--mono);font-size:.85em}
+.qs h2{font-family:var(--mono);color:var(--blue);font-size:1em;margin-bottom:14px;padding-left:18px}
+pre{background:var(--bg);border:1px solid var(--overlay);padding:14px 18px;border-radius:8px;overflow-x:auto;font-size:.82em;font-family:var(--mono);color:var(--green);margin:10px 0;line-height:1.7}
+pre .cmt{color:var(--dim)}
+code{font-family:var(--mono);font-size:.9em;background:var(--surface);padding:1px 6px;border-radius:4px}
+pre code{background:none;padding:0}
+
+/* ── SECTIONS ─────────────────────────── */
+.sec{margin-bottom:16px;border:1px solid var(--overlay);border-radius:10px;overflow:hidden;transition:border-color .2s}
+.sec:hover{border-color:var(--dim)}
+.sec-head{background:var(--surface);padding:16px 22px;cursor:pointer;display:flex;align-items:center;gap:14px;user-select:none;transition:background .15s}
+.sec-head:hover{background:var(--overlay)}
+.sec-head h3{font-family:var(--sans);font-weight:600;font-size:.95em;color:var(--text);flex:1}
+.badge{font-family:var(--mono);font-size:.65em;padding:3px 10px;border-radius:10px;font-weight:700;letter-spacing:.04em}
+.badge-blue{background:rgba(137,180,250,.15);color:var(--blue)}
+.badge-green{background:rgba(166,227,161,.15);color:var(--green)}
+.badge-red{background:rgba(243,139,168,.15);color:var(--red)}
+.badge-mauve{background:rgba(203,166,247,.15);color:var(--mauve)}
+.badge-yellow{background:rgba(249,226,175,.15);color:var(--yellow)}
+.badge-teal{background:rgba(148,226,213,.15);color:var(--teal)}
+.chevron{color:var(--dim);font-size:.8em;transition:transform .25s;flex-shrink:0}
+.sec.open .chevron{transform:rotate(90deg)}
+.sec-body{display:none;padding:20px 22px;background:var(--bg);border-top:1px solid var(--overlay)}
+.sec.open .sec-body{display:block}
+
+/* ── FLOW DIAGRAMS (pure CSS) ─────────── */
+.flow{display:flex;flex-direction:column;align-items:center;gap:0;margin:20px 0}
+.flow-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center}
+.flow-node{padding:10px 18px;border-radius:8px;font-family:var(--mono);font-size:.78em;text-align:center;font-weight:500;position:relative;min-width:140px;border:2px solid transparent}
+.fn-blue{background:rgba(137,180,250,.15);color:var(--blue);border-color:rgba(137,180,250,.3)}
+.fn-mauve{background:rgba(203,166,247,.15);color:var(--mauve);border-color:rgba(203,166,247,.3)}
+.fn-green{background:rgba(166,227,161,.15);color:var(--green);border-color:rgba(166,227,161,.3)}
+.fn-red{background:rgba(243,139,168,.15);color:var(--red);border-color:rgba(243,139,168,.3)}
+.fn-yellow{background:rgba(249,226,175,.15);color:var(--yellow);border-color:rgba(249,226,175,.3)}
+.fn-dim{background:var(--surface);color:var(--subtext);border-color:var(--overlay)}
+.fn-teal{background:rgba(148,226,213,.15);color:var(--teal);border-color:rgba(148,226,213,.3)}
+.flow-arrow{color:var(--dim);font-family:var(--mono);font-size:1.4em;line-height:1}
+.flow-arrow-d{color:var(--dim);font-family:var(--mono);font-size:1em;padding:4px 0}
+.flow-label{font-size:.7em;color:var(--dim);font-family:var(--mono);padding:2px 8px;background:var(--surface);border-radius:4px}
+.flow-branch{display:flex;gap:30px;align-items:flex-start;justify-content:center;margin:4px 0}
+.flow-branch-label{font-size:.7em;color:var(--dim);font-family:var(--mono);text-align:center;margin-bottom:4px}
+
+/* Pipeline branch */
+.pipe-branch{display:flex;gap:30px;justify-content:center;margin:4px 0;padding:8px 0}
+.pipe-path{display:flex;flex-direction:column;align-items:center;min-width:140px}
+.pipe-label{font-family:var(--mono);font-size:.72em;color:var(--dim);margin-bottom:6px;font-weight:700;letter-spacing:.04em}
+.pipe-line{width:2px;height:24px;background:var(--dim);border:none;margin:0 auto}
+
+/* HyDE comparison */
+.hyde-compare{margin:20px 0;display:flex;flex-direction:column;gap:18px}
+.hyde-row{display:flex;align-items:center;gap:14px}
+.hyde-label{font-family:var(--mono);font-size:.75em;font-weight:700;color:var(--dim);min-width:90px;text-align:right}
+.hyde-track{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hyde-connector{display:flex;align-items:center;gap:6px}
+.hyde-line{display:block;width:30px;height:2px;background:var(--dim)}
+.hyde-text{font-family:var(--mono);font-size:.68em;color:var(--dim);white-space:nowrap}
+.hyde-gap{display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 6px}
+.hyde-dots{display:block;width:50px;height:2px;background:repeating-linear-gradient(90deg,var(--red) 0,var(--red) 4px,transparent 4px,transparent 10px)}
+.hyde-gap-label{font-family:var(--mono);font-size:.65em;color:var(--red);font-weight:700}
+
+/* Agents grid */
+.agent-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:12px 0}
+.agent-cell{background:var(--surface);border:1px solid var(--overlay);border-radius:6px;padding:8px;text-align:center;font-family:var(--mono);font-size:.7em;color:var(--yellow)}
+
+/* ── TABLES ───────────────────────────── */
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.82em}
+th{background:var(--surface);color:var(--blue);padding:10px 14px;text-align:left;font-family:var(--mono);font-size:.78em;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+td{padding:9px 14px;border-bottom:1px solid rgba(69,71,90,.5)}
+tr:hover td{background:rgba(49,50,68,.4)}
+.total-row td,.total-row th{background:var(--surface);font-weight:700}
+
+/* ── TAGS ─────────────────────────────── */
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72em;font-family:var(--mono);font-weight:700}
+.t-g{background:rgba(166,227,161,.12);color:var(--green)}
+.t-y{background:rgba(249,226,175,.12);color:var(--yellow)}
+.t-r{background:rgba(243,139,168,.12);color:var(--red)}
+
+/* ── CALLOUTS ─────────────────────────── */
+.callout{padding:14px 18px;border-radius:8px;margin:12px 0;font-size:.85em;border-left:3px solid var(--blue);background:rgba(137,180,250,.05)}
+.callout.warn{border-left-color:var(--red);background:rgba(243,139,168,.05)}
+.callout.ok{border-left-color:var(--green);background:rgba(166,227,161,.05)}
+.callout b{color:var(--blue)}
+.callout.warn b{color:var(--red)}
+.callout.ok b{color:var(--green)}
+
+/* ── MISC ─────────────────────────────── */
+h4{color:var(--mauve);font-size:.88em;margin:16px 0 8px;font-weight:600}
+p{margin:6px 0}
+ul,ol{margin:8px 0 8px 22px}
+li{margin:4px 0;font-size:.9em}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+.sep{height:1px;background:var(--overlay);margin:20px 0}
+
+@media(max-width:700px){
+  .hero{padding:30px 20px}
+  .main{padding:16px 16px 40px}
+  .nav-inner{padding:8px 16px}
+  .agent-grid{grid-template-columns:repeat(3,1fr)}
+}
+
+/* Clickable step hover */
+svg a { cursor: pointer; }
+svg a:hover rect { stroke-width: 3; }
+svg a:hover text { text-decoration: underline; }
+</style>
+</head><body>
+
+
+<!-- ═══ HERO ═══ -->
+<div class="hero"><div class="hero-inner">
+  <h1>d<span>search</span></h1>
+  <div class="tagline">Full-disk semantic search + AI answer pipeline</div>
+  <div class="chips">
+    <div class="chip"><b>997K</b> chunks</div>
+    <div class="chip"><b>63K</b> docs</div>
+    <div class="chip"><b>144GB</b> source</div>
+    <div class="chip"><b>8.3GB</b> ChromaDB</div>
+    <div class="chip accent">Cohere embed-v3 + Claude agents</div>
+  </div>
+</div></div>
+
+<!-- ═══ NAV ═══ -->
+<div class="nav"><div class="nav-inner">
+  <a href="#quickstart" class="active">Quick Start</a>
+  <a href="#pipeline">Pipeline</a>
+  <a href="#modes">Modes</a>
+  <a href="#query">Query Understanding</a>
+  <a href="#deep">Deep Mode</a>
+  <a href="#agents">Agents</a>
+  <a href="#extract">Extraction</a>
+  <a href="#rebuild">Rebuild</a>
+  <a href="#issues">Issues</a>
+  <a href="#files">Files</a>
+  <a href="#models">Models</a>
+  <a href="#future">Future</a>
+  <a href="#changelog">Changelog</a>
+</div></div>
+
+<div class="main">
+
+<!-- ═══ QUICK START ═══ -->
+<div class="qs" id="quickstart">
+  <h2>Quick Start</h2>
+  <pre><code>dsearch "query"                                    <span class="cmt"># colored terminal (50 results)</span>
+dsearch -w "query"                                 <span class="cmt"># sortable HTML table in browser</span>
+dsearch -CLexpand-CLrank-CLanswer "query"           <span class="cmt"># AI answer with citations (~4 min)</span>
+dsearch -CLexpand-CLrank-CLanswer -deep "query"     <span class="cmt"># deep multi-hop search (~7 min)</span>
+dsearch -h                                          <span class="cmt"># all flags</span></code></pre>
+</div>
+
+<!-- ═══ PIPELINE ═══ -->
+<div class="sec" id="pipeline">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Pipeline Architecture</h3>
+    <span class="badge badge-blue">DIAGRAM</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+
+    <svg viewBox="0 0 600 680" style="width:100%;max-width:600px;display:block;margin:16px auto" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#6c7086"/></marker>
+        <marker id="ahr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#f38ba8"/></marker>
+      </defs>
+      <!-- Step nodes -->
+      <rect x="210" y="10" width="180" height="36" rx="8" fill="rgba(137,180,250,.18)" stroke="#89b4fa" stroke-width="1.5"/>
+      <text x="300" y="33" text-anchor="middle" fill="#89b4fa" font-family="JetBrains Mono,monospace" font-size="13" font-weight="700">User Query</text>
+
+      <line x1="300" y1="46" x2="300" y2="68" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <a href="flow/dsearch-answer.html#SL263" target="_blank"><title>Click to view code — Step 1 at line 153</title>
+      <rect x="150" y="70" width="300" height="48" rx="8" fill="rgba(203,166,247,.15)" stroke="#cba6f7" stroke-width="1.5" style="cursor:pointer"/>
+      <text x="300" y="89" text-anchor="middle" fill="#cba6f7" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" style="cursor:pointer">Step 1 — Claude Query Understanding</text>
+      <text x="300" y="107" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="9" style="cursor:pointer">core_query + variants + subject_terms + HyDE</text></a>
+
+      <line x1="300" y1="118" x2="300" y2="140" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <a href="flow/dsearch-answer.html#SL414" target="_blank"><title>Click to view code — Step 2 at line 282</title>
+      <rect x="165" y="142" width="270" height="48" rx="8" fill="rgba(166,227,161,.15)" stroke="#a6e3a1" stroke-width="1.5" style="cursor:pointer"/>
+      <text x="300" y="161" text-anchor="middle" fill="#a6e3a1" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" style="cursor:pointer">Step 2 — Cohere + ChromaDB</text>
+      <text x="300" y="179" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="9" style="cursor:pointer">997K chunks → top 100 files</text></a>
+
+      <!-- Branch -->
+      <line x1="300" y1="190" x2="300" y2="210" stroke="#6c7086" stroke-width="1.5"/>
+      <!-- Standard path (left) -->
+      <line x1="300" y1="210" x2="180" y2="210" stroke="#6c7086" stroke-width="1.5"/>
+      <line x1="180" y1="210" x2="180" y2="330" stroke="#6c7086" stroke-width="1.5" stroke-dasharray="6,4"/>
+      <line x1="180" y1="330" x2="300" y2="330" stroke="#6c7086" stroke-width="1.5"/>
+      <text x="160" y="225" fill="#6c7086" font-family="JetBrains Mono,monospace" font-size="10" text-anchor="end">standard</text>
+      <!-- Deep path (right) -->
+      <line x1="300" y1="210" x2="420" y2="210" stroke="#f38ba8" stroke-width="1.5"/>
+      <line x1="420" y1="210" x2="420" y2="240" stroke="#f38ba8" stroke-width="1.5" marker-end="url(#ahr)"/>
+      <text x="440" y="225" fill="#f38ba8" font-family="JetBrains Mono,monospace" font-size="10">-deep</text>
+
+      <a href="flow/dsearch-answer.html#SL589" target="_blank"><title>Click to view code — Step 2b at line 349</title>
+      <rect x="320" y="242" width="200" height="48" rx="8" fill="rgba(243,139,168,.15)" stroke="#f38ba8" stroke-width="1.5" style="cursor:pointer"/>
+      <text x="420" y="261" text-anchor="middle" fill="#f38ba8" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" style="cursor:pointer">Step 2b — Deep Loop</text>
+      <text x="420" y="279" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="9" style="cursor:pointer">read → new terms → search ×3</text></a>
+      <!-- Loop arrow -->
+      <path d="M520,266 C545,266 545,250 520,250" stroke="#f38ba8" stroke-width="1.2" fill="none" stroke-dasharray="4,3"/>
+      <text x="552" y="262" fill="#f38ba8" font-family="JetBrains Mono,monospace" font-size="8">loop</text>
+
+      <line x1="420" y1="290" x2="420" y2="315" stroke="#f38ba8" stroke-width="1.5"/>
+      <line x1="420" y1="315" x2="300" y2="330" stroke="#f38ba8" stroke-width="1.5"/>
+
+      <!-- Merge point down -->
+      <line x1="300" y1="330" x2="300" y2="350" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <a href="flow/dsearch-answer.html#SL683" target="_blank"><title>Click to view code — Step 3 at line 422</title>
+      <rect x="165" y="352" width="270" height="48" rx="8" fill="rgba(69,71,90,.5)" stroke="#45475a" stroke-width="1.5" style="cursor:pointer"/>
+      <text x="300" y="371" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" style="cursor:pointer">Step 3 — Extract text</text>
+      <text x="300" y="389" text-anchor="middle" fill="#6c7086" font-family="JetBrains Mono,monospace" font-size="9" style="cursor:pointer">pdftotext / antiword / zipfile / OCR</text></a>
+
+      <line x1="300" y1="400" x2="300" y2="422" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <a href="flow/dsearch-answer.html#SL723" target="_blank"><title>Click to view code — Step 4 at line 453</title>
+      <rect x="175" y="424" width="250" height="48" rx="8" fill="rgba(249,226,175,.15)" stroke="#f9e2af" stroke-width="1.5" style="cursor:pointer"/>
+      <text x="300" y="443" text-anchor="middle" fill="#f9e2af" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" style="cursor:pointer">Step 4 — 10 Parallel Agents</text>
+      <text x="300" y="461" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="9" style="cursor:pointer">each ranks 10 files (score 0-10)</text></a>
+
+      <line x1="300" y1="472" x2="300" y2="494" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <a href="flow/dsearch-answer.html#SL880" target="_blank"><title>Click to view code — Step 5 at line 563</title>
+      <rect x="185" y="496" width="230" height="36" rx="8" fill="rgba(69,71,90,.5)" stroke="#45475a" stroke-width="1.5" style="cursor:pointer"/>
+      <text x="300" y="519" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" style="cursor:pointer">Step 5 — Merge → top 15</text></a>
+
+      <line x1="300" y1="532" x2="300" y2="554" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <a href="flow/dsearch-answer.html#SL934" target="_blank"><title>Click to view code — Step 6 at line 623</title>
+      <rect x="155" y="556" width="290" height="48" rx="8" fill="rgba(148,226,213,.15)" stroke="#94e2d5" stroke-width="1.5" style="cursor:pointer"/>
+      <text x="300" y="575" text-anchor="middle" fill="#94e2d5" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" style="cursor:pointer">Step 6 — Claude reads originals</text>
+      <text x="300" y="593" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="9" style="cursor:pointer">answer with citations</text></a>
+    </svg>
+
+    <h4>API Calls per Run</h4>
+    <table>
+      <tr><th>Step</th><th>Standard</th><th>Deep</th><th>Service</th></tr>
+      <tr><td>Query understanding</td><td>1</td><td>1</td><td>Claude</td></tr>
+      <tr><td>Embed queries</td><td>1</td><td>1</td><td>Cohere</td></tr>
+      <tr><td>Deep loop reads</td><td>&mdash;</td><td>1-3</td><td>Claude</td></tr>
+      <tr><td>Deep loop embeds</td><td>&mdash;</td><td>1-3</td><td>Cohere</td></tr>
+      <tr><td>10 ranking agents</td><td>10</td><td>10</td><td>Claude</td></tr>
+      <tr><td>Final answer</td><td>1</td><td>1</td><td>Claude</td></tr>
+      <tr class="total-row"><th>Total</th><th>12 Claude + 1 Cohere</th><th>14-16 Claude + 2-4 Cohere</th><th></th></tr>
+    </table>
+
+    <h4>Timing</h4>
+    <table>
+      <tr><th>Step</th><th>Standard</th><th>Deep</th></tr>
+      <tr><td>Query understanding</td><td>~35s</td><td>~35s</td></tr>
+      <tr><td>Retrieve</td><td>~8s</td><td>~8s</td></tr>
+      <tr><td>Deep loops</td><td>&mdash;</td><td>~90s</td></tr>
+      <tr><td>Extract text</td><td>~1s</td><td>~1s</td></tr>
+      <tr><td>10 agents (parallel)</td><td>~100s</td><td>~120s</td></tr>
+      <tr><td>Final answer</td><td>~90s</td><td>~150s</td></tr>
+      <tr class="total-row"><th>Total</th><th>~4 min</th><th>~7 min</th></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ MODES ═══ -->
+<div class="sec" id="modes">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Search Modes</h3>
+    <span class="badge badge-green">3 MODES</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <h4>Terminal (default)</h4>
+    <pre><code>dsearch "zoneminder camera setup"
+dsearch -n 20 "query"</code></pre>
+    <ul>
+      <li>Score: <span class="tag t-g">&ge;0.6</span> <span class="tag t-y">&ge;0.5</span> <span class="tag t-r">&lt;0.5</span></li>
+      <li>Path in blue, query words bold yellow, metadata: <code>[Category] .ext YYYY-MM-DD chunk N/M</code></li>
+    </ul>
+    <h4>HTML Table (-w)</h4>
+    <pre><code>dsearch -w "query"
+dsearch -w -n 100 "query"</code></pre>
+    <ul>
+      <li>9 sortable columns: #, Score, Category, Folder, File, Ext, Modified, Chunk, Snippet</li>
+      <li>Filter box, "Group by folder" button, clickable file:// paths</li>
+      <li>Output: <code>/tmp/dsearch_results.html</code></li>
+    </ul>
+    <h4>Answer (-CLexpand-CLrank-CLanswer)</h4>
+    <pre><code>dsearch -CLexpand-CLrank-CLanswer "query"
+dsearch -CLexpand-CLrank-CLanswer -deep "query"</code></pre>
+    <ul>
+      <li>Query understanding &rarr; vector search &rarr; 10 agents rank &rarr; Claude reads top 15 &rarr; cited answer</li>
+      <li><code>-deep</code>: multi-hop loop discovers terms from results, searches again (max 3 loops)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══ QUERY UNDERSTANDING ═══ -->
+<div class="sec" id="query">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Step 1: Query Understanding</h3>
+    <span class="badge badge-mauve">CLAUDE</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <p>One <code>claude -p</code> call parses user text into structured JSON:</p>
+    <pre><code>{
+  "core_query":           "clean search terms (no instructions)",
+  "variants":             ["Greek morphology variants + English"],
+  "subject_terms":        ["related technical topics"],
+  "entities":             ["Intracom", "corpus", "ΕΔΣ"],
+  "hypothetical_answer":  "HyDE: fake answer using domain vocabulary"
+}</code></pre>
+    <div class="callout">
+      <b>Why separate core_query?</b> If user writes "ψαξε και βρες τους ποιο βασιμους", Cohere embeds "ψαξε" as content &mdash; polluting the vector. Claude strips instructions for search, passes them unchanged to agents.
+    </div>
+
+    <h4>HyDE (Hypothetical Document Embedding)</h4>
+    <p>Claude generates a <b>fake answer</b> using vocabulary the real documents would use. Even a wrong guess contains domain terms that pull in files the query can't reach.</p>
+
+    <svg viewBox="0 0 700 180" style="width:100%;max-width:700px;display:block;margin:16px auto" xmlns="http://www.w3.org/2000/svg">
+      <!-- Row 1: Without HyDE -->
+      <text x="10" y="38" fill="#6c7086" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">Without</text>
+      <text x="10" y="50" fill="#6c7086" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">HyDE</text>
+      <rect x="80" y="20" width="140" height="40" rx="8" fill="rgba(137,180,250,.18)" stroke="#89b4fa" stroke-width="1.5"/>
+      <text x="150" y="37" text-anchor="middle" fill="#89b4fa" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">Query</text>
+      <text x="150" y="51" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="8">"why did I delay?"</text>
+      <line x1="220" y1="40" x2="290" y2="40" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ah)"/>
+      <text x="255" y="34" text-anchor="middle" fill="#6c7086" font-family="JetBrains Mono,monospace" font-size="8">embeds</text>
+      <rect x="292" y="24" width="100" height="32" rx="6" fill="rgba(69,71,90,.5)" stroke="#45475a" stroke-width="1"/>
+      <text x="342" y="44" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="10">delay zone</text>
+      <!-- Gap (dashed red) -->
+      <line x1="392" y1="40" x2="510" y2="40" stroke="#f38ba8" stroke-width="2" stroke-dasharray="8,6"/>
+      <text x="451" y="32" text-anchor="middle" fill="#f38ba8" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700">far apart</text>
+      <rect x="512" y="20" width="140" height="40" rx="8" fill="rgba(243,139,168,.15)" stroke="#f38ba8" stroke-width="1.5"/>
+      <text x="582" y="44" text-anchor="middle" fill="#f38ba8" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">fire alarm docs</text>
+
+      <!-- Divider -->
+      <line x1="80" y1="80" x2="660" y2="80" stroke="#45475a" stroke-width="0.5" stroke-dasharray="4,4"/>
+
+      <!-- Row 2: With HyDE -->
+      <text x="10" y="118" fill="#a6e3a1" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">With</text>
+      <text x="10" y="130" fill="#a6e3a1" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">HyDE</text>
+      <rect x="80" y="98" width="140" height="50" rx="8" fill="rgba(249,226,175,.15)" stroke="#f9e2af" stroke-width="1.5"/>
+      <text x="150" y="116" text-anchor="middle" fill="#f9e2af" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">HyDE answer</text>
+      <text x="150" y="130" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="7.5">"delay + fire detection</text>
+      <text x="150" y="141" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="7.5">+ BS-660 + site visits"</text>
+      <line x1="220" y1="123" x2="290" y2="123" stroke="#a6e3a1" stroke-width="1.5" marker-end="url(#ah)"/>
+      <text x="255" y="117" text-anchor="middle" fill="#a6e3a1" font-family="JetBrains Mono,monospace" font-size="8">embeds</text>
+      <rect x="292" y="107" width="120" height="32" rx="6" fill="rgba(166,227,161,.15)" stroke="#a6e3a1" stroke-width="1.5"/>
+      <text x="352" y="127" text-anchor="middle" fill="#a6e3a1" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">overlap zone</text>
+      <!-- Close connection (solid green) -->
+      <line x1="412" y1="123" x2="510" y2="123" stroke="#a6e3a1" stroke-width="2" marker-end="url(#ah)"/>
+      <text x="461" y="115" text-anchor="middle" fill="#a6e3a1" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700">close!</text>
+      <rect x="512" y="103" width="140" height="40" rx="8" fill="rgba(243,139,168,.15)" stroke="#f38ba8" stroke-width="1.5"/>
+      <text x="582" y="127" text-anchor="middle" fill="#f38ba8" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">fire alarm docs</text>
+    </svg>
+  </div>
+</div>
+
+<!-- ═══ DEEP MODE ═══ -->
+<div class="sec" id="deep">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Deep Mode (-deep)</h3>
+    <span class="badge badge-red">MULTI-HOP</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <p>Iterative retrieval &mdash; reads results, discovers new terms, searches again:</p>
+
+    <svg viewBox="0 0 500 320" style="width:100%;max-width:500px;display:block;margin:16px auto" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ahd" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#6c7086"/></marker>
+      </defs>
+      <rect x="140" y="8" width="220" height="32" rx="8" fill="rgba(137,180,250,.18)" stroke="#89b4fa" stroke-width="1.5"/>
+      <text x="250" y="29" text-anchor="middle" fill="#89b4fa" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700">Initial search: 100 files</text>
+
+      <line x1="250" y1="40" x2="250" y2="58" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ahd)"/>
+
+      <rect x="150" y="60" width="200" height="32" rx="6" fill="rgba(69,71,90,.5)" stroke="#45475a" stroke-width="1"/>
+      <text x="250" y="81" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="10">Read top 10 results</text>
+
+      <line x1="250" y1="92" x2="250" y2="110" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ahd)"/>
+
+      <rect x="120" y="112" width="260" height="32" rx="8" fill="rgba(203,166,247,.15)" stroke="#cba6f7" stroke-width="1.5"/>
+      <text x="250" y="133" text-anchor="middle" fill="#cba6f7" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">Claude extracts new search terms</text>
+
+      <line x1="250" y1="144" x2="250" y2="162" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ahd)"/>
+
+      <rect x="120" y="164" width="260" height="32" rx="8" fill="rgba(249,226,175,.15)" stroke="#f9e2af" stroke-width="1.5"/>
+      <text x="250" y="185" text-anchor="middle" fill="#f9e2af" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">Search ChromaDB with new terms</text>
+
+      <line x1="250" y1="196" x2="250" y2="214" stroke="#6c7086" stroke-width="1.5" marker-end="url(#ahd)"/>
+
+      <!-- Decision diamond -->
+      <polygon points="250,216 310,240 250,264 190,240" fill="rgba(69,71,90,.5)" stroke="#45475a" stroke-width="1.5"/>
+      <text x="250" y="244" text-anchor="middle" fill="#a6adc8" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700">New files?</text>
+
+      <!-- Yes: loop back -->
+      <line x1="310" y1="240" x2="400" y2="240" stroke="#f38ba8" stroke-width="1.5"/>
+      <line x1="400" y1="240" x2="400" y2="76" stroke="#f38ba8" stroke-width="1.5"/>
+      <line x1="400" y1="76" x2="352" y2="76" stroke="#f38ba8" stroke-width="1.5" marker-end="url(#ahr)"/>
+      <text x="415" y="160" fill="#f38ba8" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700">Yes</text>
+
+      <!-- No: done -->
+      <line x1="250" y1="264" x2="250" y2="282" stroke="#a6e3a1" stroke-width="1.5" marker-end="url(#ahd)"/>
+      <text x="220" y="278" fill="#6c7086" font-family="JetBrains Mono,monospace" font-size="8" text-anchor="end">No / 3 loops</text>
+      <rect x="160" y="284" width="180" height="32" rx="8" fill="rgba(166,227,161,.15)" stroke="#a6e3a1" stroke-width="1.5"/>
+      <text x="250" y="305" text-anchor="middle" fill="#a6e3a1" font-family="JetBrains Mono,monospace" font-size="10" font-weight="700">Done → top 100 files</text>
+    </svg>
+
+    <h4>Real Example: Intracom query</h4>
+    <table>
+      <tr><th>Loop</th><th>New terms extracted</th><th>Files</th></tr>
+      <tr><td>Initial</td><td>core query + variants</td><td>36</td></tr>
+      <tr><td>Loop 1</td><td>ανιχνευτής στάθμης ύδατος, Τσώλου ΔΥΠΜ</td><td>232</td></tr>
+      <tr><td>Loop 2</td><td>αξιολόγηση προσφοράς, Υ/Σ ΜΤ ΧΤ</td><td>354</td></tr>
+      <tr><td>Loop 3</td><td>Κότσαλος κοστολόγηση, εργασιακή ανεπάρκεια</td><td>512</td></tr>
+    </table>
+    <div class="callout ok">
+      Deep mode found <b>ΑξιολογησηIntracom.odt</b> (fire alarm evaluation) and <b>Περιληψη.doc</b> that standard mode missed.
+    </div>
+  </div>
+</div>
+
+<!-- ═══ AGENTS ═══ -->
+<div class="sec" id="agents">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Agent Architecture</h3>
+    <span class="badge badge-yellow">10 AGENTS</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <p>100 files &rarr; 10 batches &rarr; 10 parallel <code>claude -p</code> (6 concurrent).</p>
+    <div class="agent-grid">
+      <div class="agent-cell">Agent 1<br>10 files</div>
+      <div class="agent-cell">Agent 2<br>10 files</div>
+      <div class="agent-cell">Agent 3<br>10 files</div>
+      <div class="agent-cell">Agent 4<br>10 files</div>
+      <div class="agent-cell">Agent 5<br>10 files</div>
+      <div class="agent-cell">Agent 6<br>10 files</div>
+      <div class="agent-cell">Agent 7<br>10 files</div>
+      <div class="agent-cell">Agent 8<br>10 files</div>
+      <div class="agent-cell">Agent 9<br>10 files</div>
+      <div class="agent-cell">Agent 10<br>10 files</div>
+    </div>
+    <h4>Agents RANK only &mdash; final Claude answers</h4>
+    <pre><code>{"rankings": [
+  {"file": 1, "filename": "Πρωτοκολλο.pdf", "score": 9, "reason": "directly addresses delay"},
+  {"file": 2, "filename": "random.txt",      "score": 1, "reason": "unrelated"}
+]}</code></pre>
+    <table>
+      <tr><th></th><th>v1 (agents answer)</th><th>v2 (agents rank) &mdash; current</th></tr>
+      <tr><td>Final Claude sees</td><td>Agent summaries (lossy)</td><td><b>Original file text</b></td></tr>
+      <tr><td>Verbatim quotes</td><td>2nd hand</td><td><b>Direct from source</b></td></tr>
+      <tr><td>Citation accuracy</td><td>Medium</td><td><b>High</b></td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ EXTRACTION ═══ -->
+<div class="sec" id="extract">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>File Extraction</h3>
+    <span class="badge badge-teal">9 FORMATS</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <table>
+      <tr><th>Format</th><th>Method</th><th>Max</th></tr>
+      <tr><td>.pdf</td><td><code>pdftotext</code>, fallback OCR sidecar</td><td>4000</td></tr>
+      <tr><td>.docx</td><td><code>zipfile</code> &rarr; document.xml &rarr; strip tags</td><td>4000</td></tr>
+      <tr><td>.odt/.ods</td><td><code>zipfile</code> &rarr; content.xml &rarr; strip tags</td><td>4000</td></tr>
+      <tr><td>.doc</td><td><code>antiword</code></td><td>4000</td></tr>
+      <tr><td>.xlsx</td><td><code>openpyxl</code> (read_only)</td><td>4000</td></tr>
+      <tr><td>.xls</td><td><code>xlrd</code></td><td>4000</td></tr>
+      <tr><td>.jpg/.png</td><td>OCR sidecars</td><td>4000</td></tr>
+      <tr><td>.html</td><td>Strip style/script/tags</td><td>4000</td></tr>
+      <tr><td>.txt/.md</td><td>Direct read</td><td>4000</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ REBUILD ═══ -->
+<div class="sec" id="rebuild">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Rebuild from Scratch</h3>
+    <span class="badge badge-blue">6 STEPS</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <ol>
+      <li><b>Reindex Recoll</b> &mdash; <code>recollindex -c ~/.recoll</code></li>
+      <li><b>Export file list</b> &mdash; <code>recollq</code> all MIME types</li>
+      <li><b>Extract + chunk</b> &mdash; <code>python3 scripts/extract_hybrid.py</code> (6.5 min)</li>
+      <li><b>Embed</b> &mdash; <code>python3 scripts/cohere_embed2.py</code> (~3.5h, ~$19)</li>
+      <li><b>Build ChromaDB</b> &mdash; <code>python3 scripts/build_chroma_from_embeddings.py</code></li>
+      <li><b>Install</b> &mdash; <code>sudo cp scripts/dsearch /usr/local/bin/</code></li>
+    </ol>
+    <div class="callout">
+      <b>Prerequisites:</b> Recoll 1.34+, Python 3.11+, Cohere API key in <code>~/.config/dsearch/.env</code>, venv at <code>$VENV_GTE/</code>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ KNOWN ISSUES ═══ -->
+<div class="sec" id="issues">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Known Issues</h3>
+    <span class="badge badge-red">6 ISSUES</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <table>
+      <tr><th>Issue</th><th>Impact</th><th>Workaround</th></tr>
+      <tr><td>Step 1 JSON parse fails</td><td>Falls back to raw query</td><td>Retry / simplify query</td></tr>
+      <tr><td><code>claude -p</code> ~15s startup</td><td>~85% of time is overhead</td><td>Use API directly</td></tr>
+      <tr><td>Exact numbers score low</td><td>IDs not found</td><td>Use recoll BM25</td></tr>
+      <tr><td>Vocabulary gap (no -deep)</td><td>Technical docs missed</td><td><code>-deep</code> or domain hints</td></tr>
+      <tr><td>Greek substring highlight</td><td>"της" in "απάντησης"</td><td>Word-boundary regex</td></tr>
+      <tr><td>No BM25 hybrid yet</td><td>Misses keywords</td><td>Planned: Recoll</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ KEY FILES ═══ -->
+<div class="sec" id="files">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Key Files</h3>
+    <span class="badge badge-blue">FILES</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <table>
+      <tr><th>File</th><th>Purpose</th></tr>
+      <tr><td><code>/usr/local/bin/dsearch</code></td><td>Main CLI</td></tr>
+      <tr><td><code>/usr/local/bin/dsearch-answer</code></td><td>Answer pipeline</td></tr>
+      <tr><td><code>scripts/extract_hybrid.py</code></td><td>Text extraction</td></tr>
+      <tr><td><code>scripts/cohere_embed2.py</code></td><td>Cohere embedding</td></tr>
+      <tr><td><code>scripts/build_chroma_from_embeddings.py</code></td><td>Build ChromaDB</td></tr>
+      <tr><td><code>$CHROMADB_DIR/</code></td><td>ChromaDB (997K, 8.3GB)</td></tr>
+      <tr><td><code>~/.config/dsearch/.env</code></td><td>API keys</td></tr>
+      <tr><td><code>raw-embeddings/chunks-all-fulldisk.jsonl</code></td><td>Source chunks</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ MODELS ═══ -->
+<div class="sec" id="models">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Embedding Models</h3>
+    <span class="badge badge-mauve">5 MODELS</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <table>
+      <tr><th>Model</th><th>Dim</th><th>Greek</th><th>Status</th></tr>
+      <tr><td><b>Cohere embed-v3</b></td><td>1024</td><td><span class="tag t-g">Best</span></td><td>Active (ChromaDB)</td></tr>
+      <tr><td>e5-large</td><td>1024</td><td><span class="tag t-y">Good</span></td><td>FAISS only</td></tr>
+      <tr><td>e5-base</td><td>768</td><td><span class="tag t-y">Good</span></td><td>FAISS only</td></tr>
+      <tr><td>GTE</td><td>768</td><td><span class="tag t-r">Weak</span></td><td>FAISS only</td></tr>
+      <tr><td>bge-m3</td><td>1024</td><td><span class="tag t-r">Weak</span></td><td>FAISS only</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ FUTURE ═══ -->
+<div class="sec" id="future">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Future Improvements</h3>
+    <span class="badge badge-green">TODO</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <ul>
+      <li><b>Contextual Retrieval</b> (Anthropic) &mdash; prepend doc context to chunks. 67% fewer failures. ~$800 re-index.</li>
+      <li><b>BM25 Hybrid</b> &mdash; Recoll keyword + vector + RRF. Catches exact matches.</li>
+      <li><b>Cohere Rerank v4</b> &mdash; post-retrieval reranking. ~$0.002/query.</li>
+      <li><b>Word-boundary regex</b> &mdash; fix Greek substring highlighting.</li>
+      <li><b>Anthropic API direct</b> &mdash; replace <code>claude -p</code> for 3x speed.</li>
+      <li><b>BGE-reranker-v2-m3</b> &mdash; self-hosted multilingual reranker.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══ CHANGELOG ═══ -->
+<div class="sec" id="changelog">
+  <div class="sec-head" onclick="tog(this)">
+    <h3>Changelog (2026-04-04)</h3>
+    <span class="badge badge-yellow">SESSION</span>
+    <span class="chevron">&#9654;</span>
+  </div>
+  <div class="sec-body">
+    <ol>
+      <li>Colored terminal output (score/path/snippet, query highlights)</li>
+      <li><code>-w</code> HTML sortable table (9 columns, filter, group)</li>
+      <li><code>-h</code> help flag</li>
+      <li>ChromaDB metadata: Category, Ext, Modified, Chunk</li>
+      <li><code>dsearch-answer</code> pipeline</li>
+      <li>v1: agents answer &rarr; v2: agents rank, final reads originals</li>
+      <li>Query understanding: core_query + variants + subject_terms</li>
+      <li>HyDE (Hypothetical Document Embedding)</li>
+      <li><code>-deep</code> multi-hop retrieval loop</li>
+      <li>This documentation page</li>
+    </ol>
+    <h4>Backups</h4>
+    <pre><code>~/dsearch.bak.2026-04-04_color              <span class="cmt"># original</span>
+~/dsearch.bak.2026-04-04_pre-answer         <span class="cmt"># before answer mode</span>
+~/dsearch-answer.bak.2026-04-04_v1          <span class="cmt"># agents answer</span>
+~/dsearch-answer.bak.2026-04-04_v2          <span class="cmt"># before query understanding</span>
+~/dsearch-answer.bak.2026-04-04_v3          <span class="cmt"># before deep loop</span></code></pre>
+  </div>
+</div>
+
+</div><!-- main -->
+
+<script>
+// Toggle section — only from header clicks
+function tog(el){
+  // Find the .sec parent if clicked on child
+  const sec = el.closest('.sec');
+  if(sec) sec.classList.toggle('open');
+}
+
+// Stop body clicks from bubbling to .sec (prevents close when clicking content)
+document.querySelectorAll('.sec-body').forEach(b=>{
+  b.addEventListener('click',e=>e.stopPropagation());
+});
+
+// Nav links: scroll AND open the target section
+document.querySelectorAll('.nav a').forEach(a=>{
+  a.addEventListener('click',e=>{
+    const id=a.getAttribute('href').slice(1);
+    const sec=document.getElementById(id);
+    if(sec && sec.classList.contains('sec')){
+      // Open if closed
+      if(!sec.classList.contains('open')) sec.classList.add('open');
+      // Scroll with offset for sticky nav
+      setTimeout(()=>sec.scrollIntoView({behavior:'smooth',block:'start'}),50);
+      e.preventDefault();
+    }
+  });
+});
+
+// Nav highlight on scroll
+const secs=document.querySelectorAll('.sec[id],.qs[id]');
+const navLinks=document.querySelectorAll('.nav a');
+window.addEventListener('scroll',()=>{
+  let cur='';
+  secs.forEach(s=>{if(s.getBoundingClientRect().top<120)cur=s.id});
+  navLinks.forEach(a=>{a.classList.toggle('active',a.getAttribute('href')==='#'+cur)});
+},{passive:true});
+</script>
+
+
+</body></html>

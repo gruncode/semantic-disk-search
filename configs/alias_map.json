@@ -1,0 +1,27 @@
+{
+  "_comment": "Bilingual alias map for dsearch2. Each key expands to all values at query time. Keys and values are case-insensitive. Add entries as needed.",
+  "aliases": [
+    ["πολεοδομία", "πολεοδομια", "poleodomia", "urban planning", "building authority", "planning office"],
+    ["οικοδομική άδεια", "οικοδομικη αδεια", "oikodomiki adeia", "building permit", "construction permit"],
+    ["κτηματολόγιο", "κτηματολογιο", "ktimatologio", "cadastre", "land registry"],
+    ["ΕΦΚΑ", "efka", "social security", "ασφαλιστικό", "ασφαλιστικο"],
+    ["ΤΕΕ", "tee", "technical chamber", "τεχνικό επιμελητήριο", "τεχνικο επιμελητηριο"],
+    ["corpus", "documents", "my docs", "archive"],
+    ["βεβαίωση", "βεβαιωση", "vevaiosi", "certificate", "attestation"],
+    ["συμβόλαιο", "συμβολαιο", "symvolaio", "contract", "deed"],
+    ["τοπογραφικό", "τοπογραφικο", "topografiko", "survey", "topographic"],
+    ["αυθαίρετο", "αυθαιρετο", "afthereto", "unauthorized building", "illegal construction"],
+    ["ένσταση", "ενσταση", "enstasi", "objection", "appeal"],
+    ["μηχανικός", "μηχανικος", "michanikos", "engineer"],
+    ["δικηγόρος", "δικηγορος", "dikigoros", "lawyer", "attorney"],
+    ["πληρεξούσιο", "πληρεξουσιο", "plirexousio", "power of attorney"],
+    ["κληρονομιά", "κληρονομια", "klironomia", "inheritance", "estate"],
+    ["ακίνητο", "ακινητο", "akinito", "property", "real estate"],
+    ["ΕΠΑΕ", "epae", "architectural committee", "αρχιτεκτονική επιτροπή"],
+    ["ΦΕΚ", "fek", "government gazette", "Εφημερίδα Κυβερνήσεως"],
+    ["blood test", "εξετάσεις αίματος", "εξετασεις αιματος", "αιματολογικές εξετάσεις", "αιματολογικες εξετασεις", "γενική αίματος", "γενικη αιματος", "βιοχημικός έλεγχος", "βιοχημικος ελεγχος", "μικροβιολογικές εξετάσεις", "εργαστηριακές εξετάσεις"],
+    ["SCADA", "RTU", "remote terminal unit", "τηλεχειρισμός", "τηλεχειρισμος", "τηλεέλεγχος", "τηλεελεγχος", "υποσταθμός", "υποσταθμος", "EFASEC"],
+    ["manual", "εγχειρίδιο", "εγχειριδιο", "handbook", "οδηγίες", "οδηγιες", "τεχνικό εγχειρίδιο"],
+    ["πειθαρχικό", "πειθαρχικο", "πειθαρχική διαδικασία", "πειθαρχικό συμβούλιο", "ΕΔΕ", "διοικητική εξέταση", "disciplinary", "υπηρεσιακή αναφορά", "παράπτωμα"]
+  ]
+}

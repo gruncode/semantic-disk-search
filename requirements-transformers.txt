@@ -1,0 +1,8 @@
+# Venv 2: e5, bge-m3, Jupyter (used by dsearch-multimodel + notebooks)
+# Install into: ~/venvs/transformers
+faiss-cpu>=1.7
+numpy>=1.24
+transformers>=5.0
+torch>=2.0
+sentence-transformers>=2.7
+jupyter>=1.0

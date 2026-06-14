@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>dsearch-answer — pipeline flow</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#1e1e2e; --bg2:#181825; --surface:#313244; --overlay:#45475a;
+  --text:#cdd6f4; --subtext:#a6adc8; --dim:#6c7086;
+  --blue:#89b4fa; --green:#a6e3a1; --yellow:#f9e2af; --red:#f38ba8;
+  --mauve:#cba6f7; --teal:#94e2d5;
+  --mono:'JetBrains Mono',monospace; --sans:'DM Sans',system-ui,sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body {
+  background:var(--bg); color:var(--text); font-family:var(--sans);
+  line-height:1.6; transition:padding-right .3s ease;
+  min-height:100vh;
+}
+body.panel-open { padding-right:50%; }
+.hero {
+  padding:44px 40px 28px; background:var(--bg2); border-bottom:1px solid var(--overlay);
+}
+.hero-inner { max-width:1400px; margin:0 auto; }
+.hero h1 {
+  font-family:var(--mono); font-size:2.2em; font-weight:700;
+  color:var(--blue); letter-spacing:-.02em;
+}
+.hero h1 span { color:var(--mauve); }
+.hero .tagline { color:var(--subtext); font-size:.95em; margin-top:6px; }
+.chips { display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+.chip {
+  background:var(--surface); border:1px solid var(--overlay);
+  padding:5px 12px; border-radius:18px;
+  font-size:.75em; font-family:var(--mono);
+}
+.chip b { color:var(--green); }
+.main { max-width:1500px; margin:0 auto; padding:26px 40px 60px; }
+.diagram-box {
+  background:var(--bg2); border:1px solid var(--overlay);
+  border-radius:10px; padding:14px;
+  overflow-x:auto;                  /* Horizontal scroll if SVG is wider than container */
+}
+.diagram-box svg {
+  width:100%; height:auto; display:block;
+  min-width:1050px;                 /* Keep flowchart readable even when panel is open */
+}
+.hint {
+  color:var(--dim); font-family:var(--mono); font-size:.72em;
+  text-align:center; margin-top:12px;
+}
+.hint kbd {
+  background:var(--surface); border:1px solid var(--overlay);
+  border-radius:3px; padding:1px 6px; font-size:.9em; color:var(--text);
+}
+svg a { cursor:pointer; }
+#code-panel {
+  position:fixed; top:0; right:-55%; width:49%; height:100vh;
+  background:#11111b; border-left:2px solid var(--overlay);
+  box-shadow:-4px 0 20px rgba(0,0,0,.6);
+  transition:right .3s ease, width 0s;
+  z-index:9999;
+  display:flex; flex-direction:column;
+}
+#code-panel.open { right:0; }
+#code-panel.resizing { transition:none; user-select:none; }
+body.resizing { user-select:none; cursor:ew-resize !important; }
+/* Resize handle on the left edge of the panel */
+#resizer {
+  position:absolute; top:0; left:-4px; width:8px; height:100%;
+  cursor:ew-resize; background:transparent;
+  z-index:10000;
+}
+#resizer:hover, #resizer.active {
+  background:linear-gradient(90deg, transparent, var(--blue) 45%, var(--blue) 55%, transparent);
+}
+#code-panel-header {
+  padding:10px 16px; background:var(--bg2);
+  border-bottom:1px solid var(--overlay);
+  display:flex; justify-content:space-between; align-items:center;
+}
+#code-panel-title {
+  font-family:var(--mono); font-size:.85em;
+  color:var(--blue); font-weight:700;
+}
+#code-panel-close {
+  background:var(--red); color:var(--bg);
+  border:none; padding:4px 10px; border-radius:4px;
+  cursor:pointer; font-weight:700; font-size:.72em;
+}
+#code-panel-close:hover { background:#fab387; }
+#code-panel-body {
+  flex:1; overflow:auto;
+  font-family:var(--mono); font-size:.76em;
+  line-height:1.55; background:#11111b;
+  padding:12px 0 80px;
+}
+.sline { display:flex; padding:0 12px; }
+.sline .sln {
+  color:var(--overlay); width:50px; text-align:right;
+  padding-right:12px; user-select:none;
+  border-right:1px solid var(--surface); flex-shrink:0;
+}
+.sline .sc { padding-left:12px; white-space:pre; color:var(--text); }
+.sline.hl { background:rgba(69,71,90,.45); }
+.sline.hl .sln { color:var(--yellow); }
+.sline.target { background:rgba(137,180,250,.18); }
+.sline.target .sln { color:var(--blue); font-weight:700; }
+@media (max-width:1000px) {
+  body.panel-open { padding-right:0; }
+  #code-panel { width:100%; right:-100%; }
+}
+</style>
+</head><body>
+
+<div id="code-panel">
+  <div id="resizer" title="Drag to resize"></div>
+  <div id="code-panel-header">
+    <span id="code-panel-title">dsearch-answer — source</span>
+    <button id="code-panel-close">CLOSE ✕</button>
+  </div>
+  <div id="code-panel-body">
+<div id="SL1" class="sline"><span class="sln">1</span><span class="sc">#!$VENV_GTE</span></div>
+<div id="SL2" class="sline"><span class="sln">2</span><span class="sc">&quot;&quot;&quot;</span></div>
+<div id="SL3" class="sline"><span class="sln">3</span><span class="sc">================================================================================</span></div>
+<div id="SL4" class="sline"><span class="sln">4</span><span class="sc">dsearch-answer — Full-disk semantic search with AI-ranked answer</span></div>
+<div id="SL5" class="sline"><span class="sln">5</span><span class="sc">================================================================================</span></div>
+<div id="SL6" class="sline"><span class="sln">6</span><span class="sc">&nbsp;</span></div>
+<div id="SL7" class="sline"><span class="sln">7</span><span class="sc">PURPOSE</span></div>
+<div id="SL8" class="sline"><span class="sln">8</span><span class="sc">  Given a natural-language question (Greek or English), find the most relevant</span></div>
+<div id="SL9" class="sline"><span class="sln">9</span><span class="sc">  files on disk and produce a cited answer. The &quot;CLexpand → CLrank → CLanswer&quot;</span></div>
+<div id="SL10" class="sline"><span class="sln">10</span><span class="sc">  pipeline: Claude expands the query, ranks files, then reads originals to answer.</span></div>
+<div id="SL11" class="sline"><span class="sln">11</span><span class="sc">&nbsp;</span></div>
+<div id="SL12" class="sline"><span class="sln">12</span><span class="sc">USAGE</span></div>
+<div id="SL13" class="sline"><span class="sln">13</span><span class="sc">  dsearch-answer [-deep] &quot;query&quot; [n_results]</span></div>
+<div id="SL14" class="sline"><span class="sln">14</span><span class="sc">  Examples:</span></div>
+<div id="SL15" class="sline"><span class="sln">15</span><span class="sc">    dsearch-answer &quot;find all documents about project delays&quot;</span></div>
+<div id="SL16" class="sline"><span class="sln">16</span><span class="sc">    dsearch-answer -deep &quot;evaluation of Siemens proposal&quot;</span></div>
+<div id="SL17" class="sline"><span class="sln">17</span><span class="sc">    dsearch-answer &quot;water bill sfaka&quot; 50</span></div>
+<div id="SL18" class="sline"><span class="sln">18</span><span class="sc">&nbsp;</span></div>
+<div id="SL19" class="sline"><span class="sln">19</span><span class="sc">INPUTS</span></div>
+<div id="SL20" class="sline"><span class="sln">20</span><span class="sc">  argv[1]  query string (natural language)</span></div>
+<div id="SL21" class="sline"><span class="sln">21</span><span class="sc">  argv[2]  n_results (optional, default 100 files from retrieval)</span></div>
+<div id="SL22" class="sline"><span class="sln">22</span><span class="sc">  -deep    enable multi-hop retrieval (3 extra search loops)</span></div>
+<div id="SL23" class="sline"><span class="sln">23</span><span class="sc">&nbsp;</span></div>
+<div id="SL24" class="sline"><span class="sln">24</span><span class="sc">OUTPUTS (stdout)</span></div>
+<div id="SL25" class="sline"><span class="sln">25</span><span class="sc">  Progress log per step (timestamped)</span></div>
+<div id="SL26" class="sline"><span class="sln">26</span><span class="sc">  Final: ANSWER section with [filename] citations + SOURCES list</span></div>
+<div id="SL27" class="sline"><span class="sln">27</span><span class="sc">&nbsp;</span></div>
+<div id="SL28" class="sline"><span class="sln">28</span><span class="sc">PIPELINE (6 steps)</span></div>
+<div id="SL29" class="sline"><span class="sln">29</span><span class="sc">  1. Query understanding     → Claude parses query into JSON:</span></div>
+<div id="SL30" class="sline"><span class="sln">30</span><span class="sc">                                core_query + variants + subject_terms + HyDE</span></div>
+<div id="SL31" class="sline"><span class="sln">31</span><span class="sc">  2. Hybrid retrieval        → Cohere embeds all queries, ChromaDB finds top 100</span></div>
+<div id="SL32" class="sline"><span class="sln">32</span><span class="sc">     (2b) Deep loop [-deep]  → Read top 10 (MMR-diverse), extract new terms, repeat</span></div>
+<div id="SL33" class="sline"><span class="sln">33</span><span class="sc">  3. Text extraction         → pdftotext / antiword / zipfile / openpyxl / OCR</span></div>
+<div id="SL34" class="sline"><span class="sln">34</span><span class="sc">  4. Parallel ranking        → 10 batches × 10 files, 6 Claude workers score 0-10</span></div>
+<div id="SL35" class="sline"><span class="sln">35</span><span class="sc">  5. Merge + dedup           → top 15 by agent score (stem dedup for email threads)</span></div>
+<div id="SL36" class="sline"><span class="sln">36</span><span class="sc">  6. Final answer            → Claude reads ORIGINAL text of top 15 → cites sources</span></div>
+<div id="SL37" class="sline"><span class="sln">37</span><span class="sc">&nbsp;</span></div>
+<div id="SL38" class="sline"><span class="sln">38</span><span class="sc">EXTERNAL RESOURCES</span></div>
+<div id="SL39" class="sline"><span class="sln">39</span><span class="sc">  ChromaDB  $CHROMADB_DIR         (~997K chunks, persistent)</span></div>
+<div id="SL40" class="sline"><span class="sln">40</span><span class="sc">  Cohere    embed-multilingual-v3.0 (API)            (query embedding)</span></div>
+<div id="SL41" class="sline"><span class="sln">41</span><span class="sc">  Claude    claude -p via subprocess (CLI)           (Steps 1, 2b, 4, 6)</span></div>
+<div id="SL42" class="sline"><span class="sln">42</span><span class="sc">  Env keys  ~/.config/dsearch/.env                           (COHERE_API_KEY, etc.)</span></div>
+<div id="SL43" class="sline"><span class="sln">43</span><span class="sc">&nbsp;</span></div>
+<div id="SL44" class="sline"><span class="sln">44</span><span class="sc">RELATED FILES</span></div>
+<div id="SL45" class="sline"><span class="sln">45</span><span class="sc">  dsearch                      — Lightweight sibling (no agent ranking, HTML view)</span></div>
+<div id="SL46" class="sline"><span class="sln">46</span><span class="sc">  extract_chunks.py            — Builds ChromaDB from disk files (one-time indexing)</span></div>
+<div id="SL47" class="sline"><span class="sln">47</span><span class="sc">  cohere_embed.py              — Embeds chunks with Cohere (used by extract_chunks)</span></div>
+<div id="SL48" class="sline"><span class="sln">48</span><span class="sc">  build_chroma_from_embeddings → Assembles .npy embeddings into ChromaDB collection</span></div>
+<div id="SL49" class="sline"><span class="sln">49</span><span class="sc">  docs/index.html              — Pipeline diagram (clickable, links back to here)</span></div>
+<div id="SL50" class="sline"><span class="sln">50</span><span class="sc">&nbsp;</span></div>
+<div id="SL51" class="sline"><span class="sln">51</span><span class="sc">COST PER RUN</span></div>
+<div id="SL52" class="sline"><span class="sln">52</span><span class="sc">  Standard: 1 Claude (expand) + 10 Claude (rank) + 1 Claude (answer) + N Cohere = ~$0.20-0.40</span></div>
+<div id="SL53" class="sline"><span class="sln">53</span><span class="sc">  Deep:     +3 Claude (loop) + 3-15 extra Cohere embeds                         = ~$0.30-0.60</span></div>
+<div id="SL54" class="sline"><span class="sln">54</span><span class="sc">================================================================================</span></div>
+<div id="SL55" class="sline"><span class="sln">55</span><span class="sc">&quot;&quot;&quot;</span></div>
+<div id="SL56" class="sline"><span class="sln">56</span><span class="sc">import os, sys, re, json, time, subprocess, zipfile, unicodedata</span></div>
+<div id="SL57" class="sline"><span class="sln">57</span><span class="sc">from pathlib import Path</span></div>
+<div id="SL58" class="sline"><span class="sln">58</span><span class="sc">from concurrent.futures import ThreadPoolExecutor, as_completed</span></div>
+<div id="SL59" class="sline"><span class="sln">59</span><span class="sc">from json_repair import repair_json        # Fixes malformed JSON from LLM output</span></div>
+<div id="SL60" class="sline"><span class="sln">60</span><span class="sc">import regex as re_unicode                 # Unicode-aware regex (better Greek word boundaries)</span></div>
+<div id="SL61" class="sline"><span class="sln">61</span><span class="sc">&nbsp;</span></div>
+<div id="SL62" class="sline"><span class="sln">62</span><span class="sc"># ── Config ────────────────────────────────────────────────────────</span></div>
+<div id="SL63" class="sline"><span class="sln">63</span><span class="sc"># Retrieval sizing</span></div>
+<div id="SL64" class="sline"><span class="sln">64</span><span class="sc">MAX_FILES = 100            # Top N files to extract+rank after retrieval (Step 2 output)</span></div>
+<div id="SL65" class="sline"><span class="sln">65</span><span class="sc">BATCH_SIZE = 10            # Files per agent in Step 4 (100 files ÷ 10 = 10 agents)</span></div>
+<div id="SL66" class="sline"><span class="sln">66</span><span class="sc">&nbsp;</span></div>
+<div id="SL67" class="sline"><span class="sln">67</span><span class="sc"># Text budget limits (controls Claude prompt sizes — too big = timeout / context overflow)</span></div>
+<div id="SL68" class="sline"><span class="sln">68</span><span class="sc">MAX_FILE_CHARS = 300000    # ~120 pages per file, safe for Claude 1M context window</span></div>
+<div id="SL69" class="sline"><span class="sln">69</span><span class="sc">MAX_AGENT_CHARS = 150000   # ~40K tokens per agent prompt — leaves headroom for claude -p</span></div>
+<div id="SL70" class="sline"><span class="sln">70</span><span class="sc">&nbsp;</span></div>
+<div id="SL71" class="sline"><span class="sln">71</span><span class="sc"># Concurrency</span></div>
+<div id="SL72" class="sline"><span class="sln">72</span><span class="sc">AGENT_WORKERS = 6          # Parallel claude -p subprocesses in Step 4 (balance speed vs CPU load)</span></div>
+<div id="SL73" class="sline"><span class="sln">73</span><span class="sc">&nbsp;</span></div>
+<div id="SL74" class="sline"><span class="sln">74</span><span class="sc"># ChromaDB location (built by extract_chunks.py + build_chroma_from_embeddings.py)</span></div>
+<div id="SL75" class="sline"><span class="sln">75</span><span class="sc">CHROMA_PATH = &#x27;$CHROMADB_DIR&#x27;</span></div>
+<div id="SL76" class="sline"><span class="sln">76</span><span class="sc">COLLECTION = &#x27;fulldisk&#x27;    # ChromaDB collection name (~997K chunks from entire disk)</span></div>
+<div id="SL77" class="sline"><span class="sln">77</span><span class="sc">&nbsp;</span></div>
+<div id="SL78" class="sline"><span class="sln">78</span><span class="sc"># Deep retrieval loop (Step 2b, only with -deep flag)</span></div>
+<div id="SL79" class="sline"><span class="sln">79</span><span class="sc">DEEP_MAX_LOOPS = 3         # Max iterations of &quot;read → extract terms → search again&quot;</span></div>
+<div id="SL80" class="sline"><span class="sln">80</span><span class="sc">DEEP_PEEK_FILES = 10       # Files read per loop to extract new search terms (MMR-selected)</span></div>
+<div id="SL81" class="sline"><span class="sln">81</span><span class="sc">&nbsp;</span></div>
+<div id="SL82" class="sline"><span class="sln">82</span><span class="sc"># ── Load env ──────────────────────────────────────────────────────</span></div>
+<div id="SL83" class="sline"><span class="sln">83</span><span class="sc"># Loads API keys (COHERE_API_KEY etc.) from ~/.config/dsearch/.env into os.environ.</span></div>
+<div id="SL84" class="sline"><span class="sln">84</span><span class="sc"># setdefault = don&#x27;t overwrite if already set in shell.</span></div>
+<div id="SL85" class="sline"><span class="sln">85</span><span class="sc">with open(&#x27;~/.config/dsearch/.env&#x27;) as f:</span></div>
+<div id="SL86" class="sline"><span class="sln">86</span><span class="sc">    for line in f:</span></div>
+<div id="SL87" class="sline"><span class="sln">87</span><span class="sc">        if &#x27;=&#x27; in line and not line.startswith(&#x27;#&#x27;):</span></div>
+<div id="SL88" class="sline"><span class="sln">88</span><span class="sc">            k, v = line.strip().split(&#x27;=&#x27;, 1)</span></div>
+<div id="SL89" class="sline"><span class="sln">89</span><span class="sc">            os.environ.setdefault(k, v)</span></div>
+<div id="SL90" class="sline"><span class="sln">90</span><span class="sc">&nbsp;</span></div>
+<div id="SL91" class="sline"><span class="sln">91</span><span class="sc"># ── Helpers ───────────────────────────────────────────────────────</span></div>
+<div id="SL92" class="sline"><span class="sln">92</span><span class="sc">def tprint(msg):</span></div>
+<div id="SL93" class="sline"><span class="sln">93</span><span class="sc">    &quot;&quot;&quot;Timestamped progress print (used for inline step progress).&quot;&quot;&quot;</span></div>
+<div id="SL94" class="sline"><span class="sln">94</span><span class="sc">    print(f&#x27;  [{time.strftime(&quot;%H:%M:%S&quot;)}] {msg}&#x27;, flush=True)</span></div>
+<div id="SL95" class="sline"><span class="sln">95</span><span class="sc">&nbsp;</span></div>
+<div id="SL96" class="sline"><span class="sln">96</span><span class="sc">def run_claude(prompt, timeout=60):</span></div>
+<div id="SL97" class="sline"><span class="sln">97</span><span class="sc">    &quot;&quot;&quot;Spawn &#x27;claude -p -&#x27; subprocess, feed prompt via stdin, return stdout.</span></div>
+<div id="SL98" class="sline"><span class="sln">98</span><span class="sc">    Why stdin instead of argv: prompts can be &gt;100KB, exceeding POSIX ARG_MAX.</span></div>
+<div id="SL99" class="sline"><span class="sln">99</span><span class="sc">    Returns &#x27;[timeout]&#x27; or &#x27;[error: ...]&#x27; on failure (callers handle these strings).</span></div>
+<div id="SL100" class="sline"><span class="sln">100</span><span class="sc">    &quot;&quot;&quot;</span></div>
+<div id="SL101" class="sline"><span class="sln">101</span><span class="sc">    try:</span></div>
+<div id="SL102" class="sline"><span class="sln">102</span><span class="sc">        cp = subprocess.run(</span></div>
+<div id="SL103" class="sline"><span class="sln">103</span><span class="sc">            [&#x27;claude&#x27;, &#x27;-p&#x27;, &#x27;-&#x27;],</span></div>
+<div id="SL104" class="sline"><span class="sln">104</span><span class="sc">            capture_output=True, timeout=timeout,</span></div>
+<div id="SL105" class="sline"><span class="sln">105</span><span class="sc">            input=prompt, text=True</span></div>
+<div id="SL106" class="sline"><span class="sln">106</span><span class="sc">        )</span></div>
+<div id="SL107" class="sline"><span class="sln">107</span><span class="sc">        return cp.stdout.strip()</span></div>
+<div id="SL108" class="sline"><span class="sln">108</span><span class="sc">    except subprocess.TimeoutExpired:</span></div>
+<div id="SL109" class="sline"><span class="sln">109</span><span class="sc">        return &#x27;[timeout]&#x27;</span></div>
+<div id="SL110" class="sline"><span class="sln">110</span><span class="sc">    except Exception as e:</span></div>
+<div id="SL111" class="sline"><span class="sln">111</span><span class="sc">        return f&#x27;[error: {e}]&#x27;</span></div>
+<div id="SL112" class="sline"><span class="sln">112</span><span class="sc">&nbsp;</span></div>
+<div id="SL113" class="sline"><span class="sln">113</span><span class="sc">def _file_stem(filename):</span></div>
+<div id="SL114" class="sline"><span class="sln">114</span><span class="sc">    &quot;&quot;&quot;Normalize filename for cross-folder deduplication.</span></div>
+<div id="SL115" class="sline"><span class="sln">115</span><span class="sc">    Returns a lowercase &#x27;canonical&#x27; key — used to collapse copies, backups,</span></div>
+<div id="SL116" class="sline"><span class="sln">116</span><span class="sc">    and email threads so the same content isn&#x27;t ranked twice.</span></div>
+<div id="SL117" class="sline"><span class="sln">117</span><span class="sc">&nbsp;</span></div>
+<div id="SL118" class="sline"><span class="sln">118</span><span class="sc">    Handles these real-world patterns:</span></div>
+<div id="SL119" class="sline"><span class="sln">119</span><span class="sc">      - Version suffixes:  report-v2.pdf, report-BACK.pdf, report(1).pdf → &quot;report&quot;</span></div>
+<div id="SL120" class="sline"><span class="sln">120</span><span class="sc">      - Email numbering:   e0275_RE__Invoice.eml → &quot;invoice&quot;</span></div>
+<div id="SL121" class="sline"><span class="sln">121</span><span class="sc">      - Reply prefixes:    RE__Proposal.eml, Fw__Proposal.eml → &quot;proposal&quot;</span></div>
+<div id="SL122" class="sline"><span class="sln">122</span><span class="sc">    &quot;&quot;&quot;</span></div>
+<div id="SL123" class="sline"><span class="sln">123</span><span class="sc">    name = os.path.splitext(filename)[0]</span></div>
+<div id="SL124" class="sline"><span class="sln">124</span><span class="sc">    # Email thread dedup: strip &quot;e0275_&quot; export prefix + RE__/FW__ reply markers</span></div>
+<div id="SL125" class="sline"><span class="sln">125</span><span class="sc">    name = re.sub(r&#x27;^e\d{3,5}_&#x27;, &#x27;&#x27;, name)</span></div>
+<div id="SL126" class="sline"><span class="sln">126</span><span class="sc">    name = re.sub(r&#x27;^(?:RE|Re|FW|Fw)__&#x27;, &#x27;&#x27;, name)</span></div>
+<div id="SL127" class="sline"><span class="sln">127</span><span class="sc">    # Backup/version suffixes: BACK, BACK2, copy, Copy2</span></div>
+<div id="SL128" class="sline"><span class="sln">128</span><span class="sc">    name = re.sub(r&#x27;[-_]?(?:BACK|back|copy|Copy)\d*$&#x27;, &#x27;&#x27;, name)</span></div>
+<div id="SL129" class="sline"><span class="sln">129</span><span class="sc">    # Parenthesized copy counter: &quot;file(2)&quot; → &quot;file&quot;</span></div>
+<div id="SL130" class="sline"><span class="sln">130</span><span class="sc">    name = re.sub(r&#x27;\(\d+\)$&#x27;, &#x27;&#x27;, name)</span></div>
+<div id="SL131" class="sline"><span class="sln">131</span><span class="sc">    # Trailing numeric: &quot;file.2&quot; / &quot;file-3&quot; → &quot;file&quot;</span></div>
+<div id="SL132" class="sline"><span class="sln">132</span><span class="sc">    name = re.sub(r&#x27;[-_.]?\d+$&#x27;, &#x27;&#x27;, name)</span></div>
+<div id="SL133" class="sline"><span class="sln">133</span><span class="sc">    # Trailing v-version: &quot;file-v2&quot;, &quot;file.v3&quot; → &quot;file&quot;</span></div>
+<div id="SL134" class="sline"><span class="sln">134</span><span class="sc">    name = re.sub(r&#x27;[-_.]?v\d+$&#x27;, &#x27;&#x27;, name)</span></div>
+<div id="SL135" class="sline"><span class="sln">135</span><span class="sc">    return name.strip(&#x27;.-_ &#x27;).lower()</span></div>
+<div id="SL136" class="sline"><span class="sln">136</span><span class="sc">&nbsp;</span></div>
+<div id="SL137" class="sline"><span class="sln">137</span><span class="sc">&nbsp;</span></div>
+<div id="SL138" class="sline"><span class="sln">138</span><span class="sc">def extract_text(path, max_chars=MAX_FILE_CHARS):</span></div>
+<div id="SL139" class="sline"><span class="sln">139</span><span class="sc">    &quot;&quot;&quot;Extract plain text from any supported file format.</span></div>
+<div id="SL140" class="sline"><span class="sln">140</span><span class="sc">    Used by Step 3 (extract) and Step 2b (deep loop peek).</span></div>
+<div id="SL141" class="sline"><span class="sln">141</span><span class="sc">&nbsp;</span></div>
+<div id="SL142" class="sline"><span class="sln">142</span><span class="sc">    Strategy: dispatch by file extension to the right tool.</span></div>
+<div id="SL143" class="sline"><span class="sln">143</span><span class="sc">    Returns at most max_chars of text. Never raises — errors become &quot;[error: ...]&quot;.</span></div>
+<div id="SL144" class="sline"><span class="sln">144</span><span class="sc">&nbsp;</span></div>
+<div id="SL145" class="sline"><span class="sln">145</span><span class="sc">    Supported formats:</span></div>
+<div id="SL146" class="sline"><span class="sln">146</span><span class="sc">      .pdf   → pdftotext CLI (fast, native text); falls back to .ocr.gemini.md/.txt sidecar for scans</span></div>
+<div id="SL147" class="sline"><span class="sln">147</span><span class="sc">      .docx  → unzip + strip XML tags (no python-docx dependency)</span></div>
+<div id="SL148" class="sline"><span class="sln">148</span><span class="sc">      .odt/.ods → same trick (content.xml inside zip)</span></div>
+<div id="SL149" class="sline"><span class="sln">149</span><span class="sc">      .doc   → antiword CLI (old Word binary format)</span></div>
+<div id="SL150" class="sline"><span class="sln">150</span><span class="sc">      .xlsx  → openpyxl (first 3 sheets, 200 rows each)</span></div>
+<div id="SL151" class="sline"><span class="sln">151</span><span class="sc">      .xls   → xlrd (old Excel binary)</span></div>
+<div id="SL152" class="sline"><span class="sln">152</span><span class="sc">      .jpg/png/etc → OCR sidecar only (no live OCR — too slow, pre-computed by bulk_ocr_gemini)</span></div>
+<div id="SL153" class="sline"><span class="sln">153</span><span class="sc">      .html  → strip tags with regex</span></div>
+<div id="SL154" class="sline"><span class="sln">154</span><span class="sc">      * else → read as text</span></div>
+<div id="SL155" class="sline"><span class="sln">155</span><span class="sc">    &quot;&quot;&quot;</span></div>
+<div id="SL156" class="sline"><span class="sln">156</span><span class="sc">    path = str(path)</span></div>
+<div id="SL157" class="sline"><span class="sln">157</span><span class="sc">    ext = os.path.splitext(path)[1].lower()</span></div>
+<div id="SL158" class="sline"><span class="sln">158</span><span class="sc">    try:</span></div>
+<div id="SL159" class="sline"><span class="sln">159</span><span class="sc">        # PDF: try text layer first; if empty (scanned PDF), use Gemini OCR sidecar</span></div>
+<div id="SL160" class="sline"><span class="sln">160</span><span class="sc">        if ext == &#x27;.pdf&#x27;:</span></div>
+<div id="SL161" class="sline"><span class="sln">161</span><span class="sc">            cp = subprocess.run(</span></div>
+<div id="SL162" class="sline"><span class="sln">162</span><span class="sc">                [&#x27;pdftotext&#x27;, &#x27;-q&#x27;, &#x27;-nopgbrk&#x27;, path, &#x27;-&#x27;],    # -q quiet, -nopgbrk no page breaks</span></div>
+<div id="SL163" class="sline"><span class="sln">163</span><span class="sc">                capture_output=True, timeout=15, text=True</span></div>
+<div id="SL164" class="sline"><span class="sln">164</span><span class="sc">            )</span></div>
+<div id="SL165" class="sline"><span class="sln">165</span><span class="sc">            text = cp.stdout</span></div>
+<div id="SL166" class="sline"><span class="sln">166</span><span class="sc">            # Less than 50 chars = PDF has no text layer (pure scan) → use OCR cache</span></div>
+<div id="SL167" class="sline"><span class="sln">167</span><span class="sc">            if len(text.strip()) &lt; 50:</span></div>
+<div id="SL168" class="sline"><span class="sln">168</span><span class="sc">                for suffix in [&#x27;.pdf.ocr.gemini.md&#x27;, &#x27;.pdf.ocr.gemini.txt&#x27;]:</span></div>
+<div id="SL169" class="sline"><span class="sln">169</span><span class="sc">                    ocr = path + suffix</span></div>
+<div id="SL170" class="sline"><span class="sln">170</span><span class="sc">                    if os.path.exists(ocr):</span></div>
+<div id="SL171" class="sline"><span class="sln">171</span><span class="sc">                        text = open(ocr, errors=&#x27;replace&#x27;).read()</span></div>
+<div id="SL172" class="sline"><span class="sln">172</span><span class="sc">                        break</span></div>
+<div id="SL173" class="sline"><span class="sln">173</span><span class="sc">            return text[:max_chars]</span></div>
+<div id="SL174" class="sline"><span class="sln">174</span><span class="sc">&nbsp;</span></div>
+<div id="SL175" class="sline"><span class="sln">175</span><span class="sc">        # DOCX (modern Word): actually a ZIP containing XML</span></div>
+<div id="SL176" class="sline"><span class="sln">176</span><span class="sc">        # word/document.xml holds the text + tags — strip tags with regex</span></div>
+<div id="SL177" class="sline"><span class="sln">177</span><span class="sc">        if ext == &#x27;.docx&#x27;:</span></div>
+<div id="SL178" class="sline"><span class="sln">178</span><span class="sc">            with zipfile.ZipFile(path) as z:</span></div>
+<div id="SL179" class="sline"><span class="sln">179</span><span class="sc">                xml = z.read(&#x27;word/document.xml&#x27;).decode(&#x27;utf-8&#x27;, errors=&#x27;replace&#x27;)</span></div>
+<div id="SL180" class="sline"><span class="sln">180</span><span class="sc">            return re.sub(r&#x27;&lt;[^&gt;]+&gt;&#x27;, &#x27; &#x27;, xml)[:max_chars]</span></div>
+<div id="SL181" class="sline"><span class="sln">181</span><span class="sc">&nbsp;</span></div>
+<div id="SL182" class="sline"><span class="sln">182</span><span class="sc">        # ODT / ODS (LibreOffice): same trick, content.xml is the text source</span></div>
+<div id="SL183" class="sline"><span class="sln">183</span><span class="sc">        if ext in (&#x27;.odt&#x27;, &#x27;.ods&#x27;):</span></div>
+<div id="SL184" class="sline"><span class="sln">184</span><span class="sc">            with zipfile.ZipFile(path) as z:</span></div>
+<div id="SL185" class="sline"><span class="sln">185</span><span class="sc">                xml = z.read(&#x27;content.xml&#x27;).decode(&#x27;utf-8&#x27;, errors=&#x27;replace&#x27;)</span></div>
+<div id="SL186" class="sline"><span class="sln">186</span><span class="sc">            return re.sub(r&#x27;&lt;[^&gt;]+&gt;&#x27;, &#x27; &#x27;, xml)[:max_chars]</span></div>
+<div id="SL187" class="sline"><span class="sln">187</span><span class="sc">&nbsp;</span></div>
+<div id="SL188" class="sline"><span class="sln">188</span><span class="sc">        # DOC (pre-2007 Word binary): antiword is the only reliable CLI extractor</span></div>
+<div id="SL189" class="sline"><span class="sln">189</span><span class="sc">        if ext == &#x27;.doc&#x27;:</span></div>
+<div id="SL190" class="sline"><span class="sln">190</span><span class="sc">            cp = subprocess.run(</span></div>
+<div id="SL191" class="sline"><span class="sln">191</span><span class="sc">                [&#x27;antiword&#x27;, path],</span></div>
+<div id="SL192" class="sline"><span class="sln">192</span><span class="sc">                capture_output=True, timeout=10, text=True</span></div>
+<div id="SL193" class="sline"><span class="sln">193</span><span class="sc">            )</span></div>
+<div id="SL194" class="sline"><span class="sln">194</span><span class="sc">            return cp.stdout[:max_chars]</span></div>
+<div id="SL195" class="sline"><span class="sln">195</span><span class="sc">&nbsp;</span></div>
+<div id="SL196" class="sline"><span class="sln">196</span><span class="sc">        # XLSX (modern Excel): first 3 sheets × 200 rows, join cells with &quot; | &quot;</span></div>
+<div id="SL197" class="sline"><span class="sln">197</span><span class="sc">        # data_only=True evaluates formulas to their cached values</span></div>
+<div id="SL198" class="sline"><span class="sln">198</span><span class="sc">        if ext == &#x27;.xlsx&#x27;:</span></div>
+<div id="SL199" class="sline"><span class="sln">199</span><span class="sc">            try:</span></div>
+<div id="SL200" class="sline"><span class="sln">200</span><span class="sc">                import openpyxl</span></div>
+<div id="SL201" class="sline"><span class="sln">201</span><span class="sc">                wb = openpyxl.load_workbook(path, read_only=True, data_only=True)</span></div>
+<div id="SL202" class="sline"><span class="sln">202</span><span class="sc">                lines = []</span></div>
+<div id="SL203" class="sline"><span class="sln">203</span><span class="sc">                for ws in wb.worksheets[:3]:  # Cap at 3 sheets to avoid huge files</span></div>
+<div id="SL204" class="sline"><span class="sln">204</span><span class="sc">                    for row in ws.iter_rows(max_row=200, values_only=True):</span></div>
+<div id="SL205" class="sline"><span class="sln">205</span><span class="sc">                        vals = [str(c) for c in row if c is not None]</span></div>
+<div id="SL206" class="sline"><span class="sln">206</span><span class="sc">                        if vals:</span></div>
+<div id="SL207" class="sline"><span class="sln">207</span><span class="sc">                            lines.append(&#x27; | &#x27;.join(vals))</span></div>
+<div id="SL208" class="sline"><span class="sln">208</span><span class="sc">                wb.close()</span></div>
+<div id="SL209" class="sline"><span class="sln">209</span><span class="sc">                return &#x27;\n&#x27;.join(lines)[:max_chars]</span></div>
+<div id="SL210" class="sline"><span class="sln">210</span><span class="sc">            except Exception:</span></div>
+<div id="SL211" class="sline"><span class="sln">211</span><span class="sc">                return &#x27;[xlsx extraction failed]&#x27;</span></div>
+<div id="SL212" class="sline"><span class="sln">212</span><span class="sc">&nbsp;</span></div>
+<div id="SL213" class="sline"><span class="sln">213</span><span class="sc">        # XLS (pre-2007 binary Excel): xlrd only supports .xls (not .xlsx in new versions)</span></div>
+<div id="SL214" class="sline"><span class="sln">214</span><span class="sc">        if ext == &#x27;.xls&#x27;:</span></div>
+<div id="SL215" class="sline"><span class="sln">215</span><span class="sc">            try:</span></div>
+<div id="SL216" class="sline"><span class="sln">216</span><span class="sc">                import xlrd</span></div>
+<div id="SL217" class="sline"><span class="sln">217</span><span class="sc">                wb = xlrd.open_workbook(path)</span></div>
+<div id="SL218" class="sline"><span class="sln">218</span><span class="sc">                lines = []</span></div>
+<div id="SL219" class="sline"><span class="sln">219</span><span class="sc">                for ws in wb.sheets()[:3]:</span></div>
+<div id="SL220" class="sline"><span class="sln">220</span><span class="sc">                    for r in range(min(ws.nrows, 200)):</span></div>
+<div id="SL221" class="sline"><span class="sln">221</span><span class="sc">                        vals = [str(ws.cell_value(r, c)) for c in range(ws.ncols) if ws.cell_value(r, c)]</span></div>
+<div id="SL222" class="sline"><span class="sln">222</span><span class="sc">                        if vals:</span></div>
+<div id="SL223" class="sline"><span class="sln">223</span><span class="sc">                            lines.append(&#x27; | &#x27;.join(vals))</span></div>
+<div id="SL224" class="sline"><span class="sln">224</span><span class="sc">                return &#x27;\n&#x27;.join(lines)[:max_chars]</span></div>
+<div id="SL225" class="sline"><span class="sln">225</span><span class="sc">            except Exception:</span></div>
+<div id="SL226" class="sline"><span class="sln">226</span><span class="sc">                return &#x27;[xls extraction failed]&#x27;</span></div>
+<div id="SL227" class="sline"><span class="sln">227</span><span class="sc">&nbsp;</span></div>
+<div id="SL228" class="sline"><span class="sln">228</span><span class="sc">        # Images: NO live OCR (too slow for 100 files/query).</span></div>
+<div id="SL229" class="sline"><span class="sln">229</span><span class="sc">        # Uses pre-computed Gemini OCR sidecars (from bulk_ocr_gemini-onDATA.py).</span></div>
+<div id="SL230" class="sline"><span class="sln">230</span><span class="sc">        # Sidecar naming: image.jpg → image.jpg.ocr.gemini.txt (preferred: .md, then .txt, then pro variants)</span></div>
+<div id="SL231" class="sline"><span class="sln">231</span><span class="sc">        if ext in (&#x27;.jpg&#x27;, &#x27;.jpeg&#x27;, &#x27;.png&#x27;, &#x27;.tif&#x27;, &#x27;.tiff&#x27;, &#x27;.bmp&#x27;):</span></div>
+<div id="SL232" class="sline"><span class="sln">232</span><span class="sc">            for suffix in [&#x27;.ocr.gemini-pro.txt&#x27;, &#x27;.ocr.gemini.txt&#x27;, &#x27;.ocr.gemini.md&#x27;, &#x27;.ocr.txt&#x27;]:</span></div>
+<div id="SL233" class="sline"><span class="sln">233</span><span class="sc">                ocr = path + suffix</span></div>
+<div id="SL234" class="sline"><span class="sln">234</span><span class="sc">                if os.path.exists(ocr):</span></div>
+<div id="SL235" class="sline"><span class="sln">235</span><span class="sc">                    return open(ocr, errors=&#x27;replace&#x27;).read()[:max_chars]</span></div>
+<div id="SL236" class="sline"><span class="sln">236</span><span class="sc">            return &#x27;[no OCR sidecar]&#x27;</span></div>
+<div id="SL237" class="sline"><span class="sln">237</span><span class="sc">&nbsp;</span></div>
+<div id="SL238" class="sline"><span class="sln">238</span><span class="sc">        # HTML: strip &lt;style&gt;/&lt;script&gt; blocks first (content in them is useless),</span></div>
+<div id="SL239" class="sline"><span class="sln">239</span><span class="sc">        # then strip remaining tags, then collapse whitespace.</span></div>
+<div id="SL240" class="sline"><span class="sln">240</span><span class="sc">        if ext in (&#x27;.html&#x27;, &#x27;.htm&#x27;):</span></div>
+<div id="SL241" class="sline"><span class="sln">241</span><span class="sc">            text = open(path, errors=&#x27;replace&#x27;).read()</span></div>
+<div id="SL242" class="sline"><span class="sln">242</span><span class="sc">            text = re.sub(r&#x27;&lt;style[^&gt;]*&gt;.*?&lt;/style&gt;&#x27;, &#x27;&#x27;, text, flags=re.DOTALL)</span></div>
+<div id="SL243" class="sline"><span class="sln">243</span><span class="sc">            text = re.sub(r&#x27;&lt;script[^&gt;]*&gt;.*?&lt;/script&gt;&#x27;, &#x27;&#x27;, text, flags=re.DOTALL)</span></div>
+<div id="SL244" class="sline"><span class="sln">244</span><span class="sc">            text = re.sub(r&#x27;&lt;[^&gt;]+&gt;&#x27;, &#x27; &#x27;, text)</span></div>
+<div id="SL245" class="sline"><span class="sln">245</span><span class="sc">            text = re.sub(r&#x27;\s+&#x27;, &#x27; &#x27;, text)</span></div>
+<div id="SL246" class="sline"><span class="sln">246</span><span class="sc">            return text.strip()[:max_chars]</span></div>
+<div id="SL247" class="sline"><span class="sln">247</span><span class="sc">&nbsp;</span></div>
+<div id="SL248" class="sline"><span class="sln">248</span><span class="sc">        # Fallback: treat as plain text (txt, md, csv, py, json, yml, log, etc.)</span></div>
+<div id="SL249" class="sline"><span class="sln">249</span><span class="sc">        # errors=&#x27;replace&#x27; handles non-UTF8 bytes without crashing</span></div>
+<div id="SL250" class="sline"><span class="sln">250</span><span class="sc">        return open(path, errors=&#x27;replace&#x27;).read()[:max_chars]</span></div>
+<div id="SL251" class="sline"><span class="sln">251</span><span class="sc">&nbsp;</span></div>
+<div id="SL252" class="sline"><span class="sln">252</span><span class="sc">    except Exception as e:</span></div>
+<div id="SL253" class="sline"><span class="sln">253</span><span class="sc">        # Never raise — caller (Step 3) checks for &quot;[&quot; prefix to detect failures</span></div>
+<div id="SL254" class="sline"><span class="sln">254</span><span class="sc">        return f&#x27;[extraction error: {e}]&#x27;</span></div>
+<div id="SL255" class="sline"><span class="sln">255</span><span class="sc">&nbsp;</span></div>
+<div id="SL256" class="sline"><span class="sln">256</span><span class="sc">&nbsp;</span></div>
+<div id="SL257" class="sline"><span class="sln">257</span><span class="sc"># ── Step 1: Query understanding ───────────────────────────────────</span></div>
+<div id="SL258" class="sline"><span class="sln">258</span><span class="sc"># INPUT:  raw user query (natural language, Greek or English)</span></div>
+<div id="SL259" class="sline"><span class="sln">259</span><span class="sc"># OUTPUT: list of search queries — [core_query, variants..., subjects..., HyDE]</span></div>
+<div id="SL260" class="sline"><span class="sln">260</span><span class="sc"># METHOD: pre-search for context, then Claude expands into 5-8 search queries</span></div>
+<div id="SL261" class="sline"><span class="sln">261</span><span class="sc"># WHY:    one query string produces weak embeddings; expansion + HyDE catches</span></div>
+<div id="SL262" class="sline"><span class="sln">262</span><span class="sc">#         files using different vocabulary for the same concept</span></div>
+<div id="SL263" class="sline"><span class="sln">263</span><span class="sc">def step_understand(query):</span></div>
+<div id="SL264" class="sline"><span class="sln">264</span><span class="sc">    print(f&#x27;\n=== STEP 1: Query understanding ===&#x27;, flush=True)</span></div>
+<div id="SL265" class="sline"><span class="sln">265</span><span class="sc">    t0 = time.time()</span></div>
+<div id="SL266" class="sline"><span class="sln">266</span><span class="sc">&nbsp;</span></div>
+<div id="SL267" class="sline"><span class="sln">267</span><span class="sc">    # Pre-search: quick corpus peek to prime Claude with domain vocabulary.</span></div>
+<div id="SL268" class="sline"><span class="sln">268</span><span class="sc">    # We embed the raw query, get top 10 filenames, feed them to Claude as context.</span></div>
+<div id="SL269" class="sline"><span class="sln">269</span><span class="sc">    # This helps Claude guess domain-specific terms (equipment, project codes) it</span></div>
+<div id="SL270" class="sline"><span class="sln">270</span><span class="sc">    # wouldn&#x27;t know from the query alone.</span></div>
+<div id="SL271" class="sline"><span class="sln">271</span><span class="sc">    peek_names = &#x27;&#x27;</span></div>
+<div id="SL272" class="sline"><span class="sln">272</span><span class="sc">    try:</span></div>
+<div id="SL273" class="sline"><span class="sln">273</span><span class="sc">        import cohere, chromadb</span></div>
+<div id="SL274" class="sline"><span class="sln">274</span><span class="sc">        co = cohere.ClientV2(api_key=os.environ[&#x27;COHERE_API_KEY&#x27;])</span></div>
+<div id="SL275" class="sline"><span class="sln">275</span><span class="sc">        # Cohere multilingual v3 — handles Greek + English in same model</span></div>
+<div id="SL276" class="sline"><span class="sln">276</span><span class="sc">        # input_type=&#x27;search_query&#x27; tells Cohere to use query-side embedding</span></div>
+<div id="SL277" class="sline"><span class="sln">277</span><span class="sc">        # (asymmetric retrieval: queries and documents get different embeddings)</span></div>
+<div id="SL278" class="sline"><span class="sln">278</span><span class="sc">        resp = co.embed(texts=[query], model=&#x27;embed-multilingual-v3.0&#x27;,</span></div>
+<div id="SL279" class="sline"><span class="sln">279</span><span class="sc">                        input_type=&#x27;search_query&#x27;, embedding_types=[&#x27;float&#x27;])</span></div>
+<div id="SL280" class="sline"><span class="sln">280</span><span class="sc">        col = chromadb.PersistentClient(path=CHROMA_PATH).get_collection(COLLECTION)</span></div>
+<div id="SL281" class="sline"><span class="sln">281</span><span class="sc">        peek = col.query(query_embeddings=resp.embeddings.float_, n_results=10)</span></div>
+<div id="SL282" class="sline"><span class="sln">282</span><span class="sc">        # Deduplicate filenames (same file can match multiple chunks)</span></div>
+<div id="SL283" class="sline"><span class="sln">283</span><span class="sc">        seen = set()</span></div>
+<div id="SL284" class="sline"><span class="sln">284</span><span class="sc">        names = []</span></div>
+<div id="SL285" class="sline"><span class="sln">285</span><span class="sc">        for meta in peek[&#x27;metadatas&#x27;][0]:</span></div>
+<div id="SL286" class="sline"><span class="sln">286</span><span class="sc">            fn = os.path.basename(meta[&#x27;path&#x27;])</span></div>
+<div id="SL287" class="sline"><span class="sln">287</span><span class="sc">            if fn not in seen:</span></div>
+<div id="SL288" class="sline"><span class="sln">288</span><span class="sc">                seen.add(fn)</span></div>
+<div id="SL289" class="sline"><span class="sln">289</span><span class="sc">                names.append(fn)</span></div>
+<div id="SL290" class="sline"><span class="sln">290</span><span class="sc">        peek_names = &#x27;\n&#x27;.join(f&#x27;  - {n}&#x27; for n in names[:8])</span></div>
+<div id="SL291" class="sline"><span class="sln">291</span><span class="sc">        tprint(f&#x27;Pre-search found {len(names)} files for context&#x27;)</span></div>
+<div id="SL292" class="sline"><span class="sln">292</span><span class="sc">    except Exception as e:</span></div>
+<div id="SL293" class="sline"><span class="sln">293</span><span class="sc">        tprint(f&#x27;Pre-search skipped: {e}&#x27;)</span></div>
+<div id="SL294" class="sline"><span class="sln">294</span><span class="sc">&nbsp;</span></div>
+<div id="SL295" class="sline"><span class="sln">295</span><span class="sc">    prompt = (</span></div>
+<div id="SL296" class="sline"><span class="sln">296</span><span class="sc">        &#x27;You are a query understanding system for a Greek/English document search engine.\n&#x27;</span></div>
+<div id="SL297" class="sline"><span class="sln">297</span><span class="sc">        &#x27;Parse the user query and return ONLY valid JSON with these fields:\n\n&#x27;</span></div>
+<div id="SL298" class="sline"><span class="sln">298</span><span class="sc">        &#x27;{\n&#x27;</span></div>
+<div id="SL299" class="sline"><span class="sln">299</span><span class="sc">        &#x27;  &quot;core_query&quot;: &quot;the main searchable topic — strip any instructions/meta like &#x27;</span></div>
+<div id="SL300" class="sline"><span class="sln">300</span><span class="sc">        &#x27;ψαξε, βρες, explain, summarize etc. Keep only WHAT to search for.&quot;,\n&#x27;</span></div>
+<div id="SL301" class="sline"><span class="sln">301</span><span class="sc">        &#x27;  &quot;variants&quot;: [&quot;3-4 alternative phrasings of core_query. Include Greek morphological &#x27;</span></div>
+<div id="SL302" class="sline"><span class="sln">302</span><span class="sc">        &#x27;variants (different cases/tenses/endings) and English translations.&quot;],\n&#x27;</span></div>
+<div id="SL303" class="sline"><span class="sln">303</span><span class="sc">        &#x27;  &quot;subject_terms&quot;: [&quot;3-4 related TECHNICAL topics, concepts, document types, or &#x27;</span></div>
+<div id="SL304" class="sline"><span class="sln">304</span><span class="sc">        &#x27;specific terms that would appear in files containing the answer. Think: what other &#x27;</span></div>
+<div id="SL305" class="sline"><span class="sln">305</span><span class="sc">        &#x27;subjects, equipment, procedures, people, or technical details would documents about &#x27;</span></div>
+<div id="SL306" class="sline"><span class="sln">306</span><span class="sc">        &#x27;this topic ALSO mention? These catch files that are relevant but use different vocabulary.&quot;],\n&#x27;</span></div>
+<div id="SL307" class="sline"><span class="sln">307</span><span class="sc">        &#x27;  &quot;entities&quot;: [&quot;key proper nouns: company names, people, project names, codes&quot;],\n&#x27;</span></div>
+<div id="SL308" class="sline"><span class="sln">308</span><span class="sc">        &#x27;  &quot;hypothetical_answer&quot;: &quot;Write a SHORT (3-5 sentence) hypothetical answer to the &#x27;</span></div>
+<div id="SL309" class="sline"><span class="sln">309</span><span class="sc">        &#x27;question. It does NOT need to be correct — it should use the VOCABULARY and TECHNICAL &#x27;</span></div>
+<div id="SL310" class="sline"><span class="sln">310</span><span class="sc">        &#x27;TERMS that real documents containing the answer would use. Include specific domain &#x27;</span></div>
+<div id="SL311" class="sline"><span class="sln">311</span><span class="sc">        &#x27;terms, equipment names, procedures, document types, Greek and English terms that &#x27;</span></div>
+<div id="SL312" class="sline"><span class="sln">312</span><span class="sc">        &#x27;you GUESS would appear in the relevant files. This is used for HyDE (Hypothetical &#x27;</span></div>
+<div id="SL313" class="sline"><span class="sln">313</span><span class="sc">        &#x27;Document Embedding) — the text will be embedded to find documents with similar vocabulary.&quot;\n&#x27;</span></div>
+<div id="SL314" class="sline"><span class="sln">314</span><span class="sc">        &#x27;}\n\n&#x27;</span></div>
+<div id="SL315" class="sline"><span class="sln">315</span><span class="sc">        &#x27;IMPORTANT for subject_terms:\n&#x27;</span></div>
+<div id="SL316" class="sline"><span class="sln">316</span><span class="sc">        &#x27;- Think about what the DOCUMENTS would contain, not just the question.\n&#x27;</span></div>
+<div id="SL317" class="sline"><span class="sln">317</span><span class="sc">        &#x27;- If the question is about evaluating a proposal, what technical areas does the &#x27;</span></div>
+<div id="SL318" class="sline"><span class="sln">318</span><span class="sc">        &#x27;proposal cover? What specs, equipment, standards, site conditions?\n&#x27;</span></div>
+<div id="SL319" class="sline"><span class="sln">319</span><span class="sc">        &#x27;- If the question is about a delay, what tasks were supposed to happen? What &#x27;</span></div>
+<div id="SL320" class="sline"><span class="sln">320</span><span class="sc">        &#x27;prerequisites, approvals, technical reviews?\n&#x27;</span></div>
+<div id="SL321" class="sline"><span class="sln">321</span><span class="sc">        &#x27;- Include both Greek and English terms.\n\n&#x27;</span></div>
+<div id="SL322" class="sline"><span class="sln">322</span><span class="sc">        &#x27;IMPORTANT for hypothetical_answer:\n&#x27;</span></div>
+<div id="SL323" class="sline"><span class="sln">323</span><span class="sc">        &#x27;- Use domain-specific vocabulary: equipment models, standards, Greek technical terms.\n&#x27;</span></div>
+<div id="SL324" class="sline"><span class="sln">324</span><span class="sc">        &#x27;- Mention plausible document types (email, report, evaluation, protocol).\n&#x27;</span></div>
+<div id="SL325" class="sline"><span class="sln">325</span><span class="sc">        &#x27;- Include BOTH the question topic AND the likely answer topics.\n&#x27;</span></div>
+<div id="SL326" class="sline"><span class="sln">326</span><span class="sc">        &#x27;- It is OK to guess wrong — the goal is vocabulary coverage, not correctness.\n\n&#x27;</span></div>
+<div id="SL327" class="sline"><span class="sln">327</span><span class="sc">        &#x27;Return ONLY the JSON. No explanation.\n\n&#x27;</span></div>
+<div id="SL328" class="sline"><span class="sln">328</span><span class="sc">        + (f&#x27;CONTEXT — files already found for this query (use these to infer domain-specific terms):\n{peek_names}\n\n&#x27; if peek_names else &#x27;&#x27;)</span></div>
+<div id="SL329" class="sline"><span class="sln">329</span><span class="sc">        + f&#x27;User query: {query}&#x27;</span></div>
+<div id="SL330" class="sline"><span class="sln">330</span><span class="sc">    )</span></div>
+<div id="SL331" class="sline"><span class="sln">331</span><span class="sc">    raw = run_claude(prompt, timeout=45)</span></div>
+<div id="SL332" class="sline"><span class="sln">332</span><span class="sc">&nbsp;</span></div>
+<div id="SL333" class="sline"><span class="sln">333</span><span class="sc">    # Parse Claude&#x27;s JSON response — two-stage parsing for robustness.</span></div>
+<div id="SL334" class="sline"><span class="sln">334</span><span class="sc">    # LLMs sometimes wrap JSON in markdown fences, add trailing explanations,</span></div>
+<div id="SL335" class="sline"><span class="sln">335</span><span class="sc">    # or use invalid quote chars. json_repair handles all of this.</span></div>
+<div id="SL336" class="sline"><span class="sln">336</span><span class="sc">    parsed = {}</span></div>
+<div id="SL337" class="sline"><span class="sln">337</span><span class="sc">    try:</span></div>
+<div id="SL338" class="sline"><span class="sln">338</span><span class="sc">        # Stage 1: find {...} block and try strict json.loads</span></div>
+<div id="SL339" class="sline"><span class="sln">339</span><span class="sc">        match = re.search(r&#x27;\{.*\}&#x27;, raw, re.DOTALL)</span></div>
+<div id="SL340" class="sline"><span class="sln">340</span><span class="sc">        if match:</span></div>
+<div id="SL341" class="sline"><span class="sln">341</span><span class="sc">            parsed = json.loads(match.group())</span></div>
+<div id="SL342" class="sline"><span class="sln">342</span><span class="sc">    except json.JSONDecodeError:</span></div>
+<div id="SL343" class="sline"><span class="sln">343</span><span class="sc">        pass</span></div>
+<div id="SL344" class="sline"><span class="sln">344</span><span class="sc">    if not parsed:</span></div>
+<div id="SL345" class="sline"><span class="sln">345</span><span class="sc">        # Stage 2: json_repair fixes common LLM mistakes (smart quotes, trailing commas, etc.)</span></div>
+<div id="SL346" class="sline"><span class="sln">346</span><span class="sc">        try:</span></div>
+<div id="SL347" class="sline"><span class="sln">347</span><span class="sc">            fixed = repair_json(raw)</span></div>
+<div id="SL348" class="sline"><span class="sln">348</span><span class="sc">            parsed = json.loads(fixed) if isinstance(fixed, str) else fixed</span></div>
+<div id="SL349" class="sline"><span class="sln">349</span><span class="sc">            # Claude sometimes returns [{...}] instead of {...} — unwrap</span></div>
+<div id="SL350" class="sline"><span class="sln">350</span><span class="sc">            if isinstance(parsed, list) and parsed:</span></div>
+<div id="SL351" class="sline"><span class="sln">351</span><span class="sc">                parsed = parsed[0] if isinstance(parsed[0], dict) else {}</span></div>
+<div id="SL352" class="sline"><span class="sln">352</span><span class="sc">            if not isinstance(parsed, dict):</span></div>
+<div id="SL353" class="sline"><span class="sln">353</span><span class="sc">                parsed = {}</span></div>
+<div id="SL354" class="sline"><span class="sln">354</span><span class="sc">            if parsed:</span></div>
+<div id="SL355" class="sline"><span class="sln">355</span><span class="sc">                tprint(f&#x27;JSON repaired successfully&#x27;)</span></div>
+<div id="SL356" class="sline"><span class="sln">356</span><span class="sc">        except Exception:</span></div>
+<div id="SL357" class="sline"><span class="sln">357</span><span class="sc">            # Last resort: both parse stages failed — fall back to raw query only</span></div>
+<div id="SL358" class="sline"><span class="sln">358</span><span class="sc">            tprint(f&#x27;JSON parse failed — using raw query as fallback&#x27;)</span></div>
+<div id="SL359" class="sline"><span class="sln">359</span><span class="sc">            parsed = {}</span></div>
+<div id="SL360" class="sline"><span class="sln">360</span><span class="sc">&nbsp;</span></div>
+<div id="SL361" class="sline"><span class="sln">361</span><span class="sc">    # Extract the 5 JSON fields (with defaults in case Claude missed some)</span></div>
+<div id="SL362" class="sline"><span class="sln">362</span><span class="sc">    core = parsed.get(&#x27;core_query&#x27;, query)          # Cleaned query, no instruction words</span></div>
+<div id="SL363" class="sline"><span class="sln">363</span><span class="sc">    variants = parsed.get(&#x27;variants&#x27;, [])[:4]       # Alternative phrasings (Greek morphology + English)</span></div>
+<div id="SL364" class="sline"><span class="sln">364</span><span class="sc">    subjects = parsed.get(&#x27;subject_terms&#x27;, [])[:4]  # Related topics documents might mention</span></div>
+<div id="SL365" class="sline"><span class="sln">365</span><span class="sc">    entities = parsed.get(&#x27;entities&#x27;, [])[:4]       # Proper nouns (not used in retrieval, just logged)</span></div>
+<div id="SL366" class="sline"><span class="sln">366</span><span class="sc">    hyde = parsed.get(&#x27;hypothetical_answer&#x27;, &#x27;&#x27;)    # HyDE: fake answer for vocabulary matching</span></div>
+<div id="SL367" class="sline"><span class="sln">367</span><span class="sc">&nbsp;</span></div>
+<div id="SL368" class="sline"><span class="sln">368</span><span class="sc">    # Build the final search query list for Step 2.</span></div>
+<div id="SL369" class="sline"><span class="sln">369</span><span class="sc">    # Order: core first, then variants, subjects, and HyDE last.</span></div>
+<div id="SL370" class="sline"><span class="sln">370</span><span class="sc">    # HyDE: Hypothetical Document Embedding — a fake 3-5 sentence answer. Even if</span></div>
+<div id="SL371" class="sline"><span class="sln">371</span><span class="sc">    # wrong, it contains the vocabulary real answer-containing docs would use.</span></div>
+<div id="SL372" class="sline"><span class="sln">372</span><span class="sc">    # Paper: &quot;Precise Zero-Shot Dense Retrieval without Relevance Labels&quot; (2022)</span></div>
+<div id="SL373" class="sline"><span class="sln">373</span><span class="sc">    search_queries = [core] + variants + subjects</span></div>
+<div id="SL374" class="sline"><span class="sln">374</span><span class="sc">    if hyde:</span></div>
+<div id="SL375" class="sline"><span class="sln">375</span><span class="sc">        search_queries.append(hyde)</span></div>
+<div id="SL376" class="sline"><span class="sln">376</span><span class="sc">    # Deduplicate (case-insensitive), but skip HyDE — it&#x27;s long and always unique.</span></div>
+<div id="SL377" class="sline"><span class="sln">377</span><span class="sc">    seen = set()</span></div>
+<div id="SL378" class="sline"><span class="sln">378</span><span class="sc">    deduped = []</span></div>
+<div id="SL379" class="sline"><span class="sln">379</span><span class="sc">    for q in search_queries[:-1] if hyde else search_queries:</span></div>
+<div id="SL380" class="sline"><span class="sln">380</span><span class="sc">        if q.lower() not in seen:</span></div>
+<div id="SL381" class="sline"><span class="sln">381</span><span class="sc">            seen.add(q.lower())</span></div>
+<div id="SL382" class="sline"><span class="sln">382</span><span class="sc">            deduped.append(q)</span></div>
+<div id="SL383" class="sline"><span class="sln">383</span><span class="sc">    if hyde:</span></div>
+<div id="SL384" class="sline"><span class="sln">384</span><span class="sc">        deduped.append(hyde)</span></div>
+<div id="SL385" class="sline"><span class="sln">385</span><span class="sc">    search_queries = deduped</span></div>
+<div id="SL386" class="sline"><span class="sln">386</span><span class="sc">&nbsp;</span></div>
+<div id="SL387" class="sline"><span class="sln">387</span><span class="sc">    tprint(f&#x27;Parsed in {time.time()-t0:.1f}s&#x27;)</span></div>
+<div id="SL388" class="sline"><span class="sln">388</span><span class="sc">    tprint(f&#x27;Core: {core}&#x27;)</span></div>
+<div id="SL389" class="sline"><span class="sln">389</span><span class="sc">    if variants:</span></div>
+<div id="SL390" class="sline"><span class="sln">390</span><span class="sc">        tprint(f&#x27;Variants ({len(variants)}):&#x27;)</span></div>
+<div id="SL391" class="sline"><span class="sln">391</span><span class="sc">        for v in variants:</span></div>
+<div id="SL392" class="sline"><span class="sln">392</span><span class="sc">            tprint(f&#x27;  → {v}&#x27;)</span></div>
+<div id="SL393" class="sline"><span class="sln">393</span><span class="sc">    if subjects:</span></div>
+<div id="SL394" class="sline"><span class="sln">394</span><span class="sc">        tprint(f&#x27;Subject terms ({len(subjects)}):&#x27;)</span></div>
+<div id="SL395" class="sline"><span class="sln">395</span><span class="sc">        for s in subjects:</span></div>
+<div id="SL396" class="sline"><span class="sln">396</span><span class="sc">            tprint(f&#x27;  ★ {s}&#x27;)</span></div>
+<div id="SL397" class="sline"><span class="sln">397</span><span class="sc">    if entities:</span></div>
+<div id="SL398" class="sline"><span class="sln">398</span><span class="sc">        tprint(f&#x27;Entities: {&quot;, &quot;.join(entities)}&#x27;)</span></div>
+<div id="SL399" class="sline"><span class="sln">399</span><span class="sc">    if hyde:</span></div>
+<div id="SL400" class="sline"><span class="sln">400</span><span class="sc">        tprint(f&#x27;HyDE ({len(hyde)} chars): {hyde[:120]}...&#x27;)</span></div>
+<div id="SL401" class="sline"><span class="sln">401</span><span class="sc">    tprint(f&#x27;Total search queries: {len(search_queries)}&#x27;)</span></div>
+<div id="SL402" class="sline"><span class="sln">402</span><span class="sc">&nbsp;</span></div>
+<div id="SL403" class="sline"><span class="sln">403</span><span class="sc">    return search_queries</span></div>
+<div id="SL404" class="sline"><span class="sln">404</span><span class="sc">&nbsp;</span></div>
+<div id="SL405" class="sline"><span class="sln">405</span><span class="sc">&nbsp;</span></div>
+<div id="SL406" class="sline"><span class="sln">406</span><span class="sc"># ── Step 2: Hybrid retrieval ─────────────────────────────────────</span></div>
+<div id="SL407" class="sline"><span class="sln">407</span><span class="sc"># INPUT:  list of ~5-8 search queries from Step 1</span></div>
+<div id="SL408" class="sline"><span class="sln">408</span><span class="sc"># OUTPUT: 4 dicts keyed by file path:</span></div>
+<div id="SL409" class="sline"><span class="sln">409</span><span class="sc">#         ranked (top N tuples), file_scores (all), file_meta, file_embeds</span></div>
+<div id="SL410" class="sline"><span class="sln">410</span><span class="sc"># METHOD: batch-embed all queries with Cohere, run each against ChromaDB,</span></div>
+<div id="SL411" class="sline"><span class="sln">411</span><span class="sc">#         merge by path (keep best score), dedup by filename stem</span></div>
+<div id="SL412" class="sline"><span class="sln">412</span><span class="sc"># WHY:    Cohere multilingual v3 understands Greek + English in one embedding space.</span></div>
+<div id="SL413" class="sline"><span class="sln">413</span><span class="sc">#         ChromaDB holds ~997K chunks — pre-indexed by extract_chunks.py + cohere_embed.py</span></div>
+<div id="SL414" class="sline"><span class="sln">414</span><span class="sc">def step_retrieve(queries, n=MAX_FILES):</span></div>
+<div id="SL415" class="sline"><span class="sln">415</span><span class="sc">    print(f&#x27;\n=== STEP 2: Retrieve (ChromaDB x {len(queries)} queries) ===&#x27;, flush=True)</span></div>
+<div id="SL416" class="sline"><span class="sln">416</span><span class="sc">    t0 = time.time()</span></div>
+<div id="SL417" class="sline"><span class="sln">417</span><span class="sc">    import cohere, chromadb</span></div>
+<div id="SL418" class="sline"><span class="sln">418</span><span class="sc">&nbsp;</span></div>
+<div id="SL419" class="sline"><span class="sln">419</span><span class="sc">    co = cohere.ClientV2(api_key=os.environ[&#x27;COHERE_API_KEY&#x27;])</span></div>
+<div id="SL420" class="sline"><span class="sln">420</span><span class="sc">    # Batch embed: one API call for all queries (cheaper + faster than one-at-a-time)</span></div>
+<div id="SL421" class="sline"><span class="sln">421</span><span class="sc">    # Returns a list of float vectors (1024-dim for embed-multilingual-v3.0)</span></div>
+<div id="SL422" class="sline"><span class="sln">422</span><span class="sc">    resp = co.embed(</span></div>
+<div id="SL423" class="sline"><span class="sln">423</span><span class="sc">        texts=queries, model=&#x27;embed-multilingual-v3.0&#x27;,</span></div>
+<div id="SL424" class="sline"><span class="sln">424</span><span class="sc">        input_type=&#x27;search_query&#x27;, embedding_types=[&#x27;float&#x27;]</span></div>
+<div id="SL425" class="sline"><span class="sln">425</span><span class="sc">    )</span></div>
+<div id="SL426" class="sline"><span class="sln">426</span><span class="sc">&nbsp;</span></div>
+<div id="SL427" class="sline"><span class="sln">427</span><span class="sc">    col = chromadb.PersistentClient(path=CHROMA_PATH).get_collection(COLLECTION)</span></div>
+<div id="SL428" class="sline"><span class="sln">428</span><span class="sc">&nbsp;</span></div>
+<div id="SL429" class="sline"><span class="sln">429</span><span class="sc">    # Accumulators — keyed by file path. Since multiple chunks map to the same</span></div>
+<div id="SL430" class="sline"><span class="sln">430</span><span class="sc">    # file, we keep the BEST scoring chunk per file.</span></div>
+<div id="SL431" class="sline"><span class="sln">431</span><span class="sc">    file_scores = {}  # path → best score (higher = more relevant)</span></div>
+<div id="SL432" class="sline"><span class="sln">432</span><span class="sc">    file_meta = {}    # path → metadata (folder, ext, filename, etc.)</span></div>
+<div id="SL433" class="sline"><span class="sln">433</span><span class="sc">    file_embeds = {}  # path → embedding vector of best chunk (used by MMR in Step 2b)</span></div>
+<div id="SL434" class="sline"><span class="sln">434</span><span class="sc">&nbsp;</span></div>
+<div id="SL435" class="sline"><span class="sln">435</span><span class="sc">    # Run each query&#x27;s embedding against ChromaDB (50 chunks per query)</span></div>
+<div id="SL436" class="sline"><span class="sln">436</span><span class="sc">    # include=[&#x27;embeddings&#x27;] is needed so MMR can compute diversity later</span></div>
+<div id="SL437" class="sline"><span class="sln">437</span><span class="sc">    for i, qvec in enumerate(resp.embeddings.float_):</span></div>
+<div id="SL438" class="sline"><span class="sln">438</span><span class="sc">        results = col.query(query_embeddings=[qvec], n_results=50,</span></div>
+<div id="SL439" class="sline"><span class="sln">439</span><span class="sc">                            include=[&#x27;documents&#x27;, &#x27;metadatas&#x27;, &#x27;distances&#x27;, &#x27;embeddings&#x27;])</span></div>
+<div id="SL440" class="sline"><span class="sln">440</span><span class="sc">        # ChromaDB returns distance (lower=better); convert to similarity score (higher=better)</span></div>
+<div id="SL441" class="sline"><span class="sln">441</span><span class="sc">        for doc, meta, dist, emb in zip(</span></div>
+<div id="SL442" class="sline"><span class="sln">442</span><span class="sc">                results[&#x27;documents&#x27;][0], results[&#x27;metadatas&#x27;][0],</span></div>
+<div id="SL443" class="sline"><span class="sln">443</span><span class="sc">                results[&#x27;distances&#x27;][0], results[&#x27;embeddings&#x27;][0]):</span></div>
+<div id="SL444" class="sline"><span class="sln">444</span><span class="sc">            path = meta[&#x27;path&#x27;]</span></div>
+<div id="SL445" class="sline"><span class="sln">445</span><span class="sc">            score = 1 - dist          # cosine distance → cosine similarity</span></div>
+<div id="SL446" class="sline"><span class="sln">446</span><span class="sc">            # Keep the best chunk per file across all queries</span></div>
+<div id="SL447" class="sline"><span class="sln">447</span><span class="sc">            if path not in file_scores or score &gt; file_scores[path]:</span></div>
+<div id="SL448" class="sline"><span class="sln">448</span><span class="sc">                file_scores[path] = score</span></div>
+<div id="SL449" class="sline"><span class="sln">449</span><span class="sc">                file_meta[path] = meta</span></div>
+<div id="SL450" class="sline"><span class="sln">450</span><span class="sc">                file_embeds[path] = emb</span></div>
+<div id="SL451" class="sline"><span class="sln">451</span><span class="sc">&nbsp;</span></div>
+<div id="SL452" class="sline"><span class="sln">452</span><span class="sc">    # Stem-based dedup: collapse email threads (RE__, FW__) and backup copies</span></div>
+<div id="SL453" class="sline"><span class="sln">453</span><span class="sc">    # so the same content isn&#x27;t ranked twice by different paths.</span></div>
+<div id="SL454" class="sline"><span class="sln">454</span><span class="sc">    # _file_stem normalizes: &quot;RE__Invoice.eml&quot; and &quot;Invoice.eml&quot; → &quot;invoice&quot;</span></div>
+<div id="SL455" class="sline"><span class="sln">455</span><span class="sc">    by_stem = {}  # stem → (path, score)</span></div>
+<div id="SL456" class="sline"><span class="sln">456</span><span class="sc">    for path, score in file_scores.items():</span></div>
+<div id="SL457" class="sline"><span class="sln">457</span><span class="sc">        stem = _file_stem(os.path.basename(path))</span></div>
+<div id="SL458" class="sline"><span class="sln">458</span><span class="sc">        if stem not in by_stem or score &gt; by_stem[stem][1]:</span></div>
+<div id="SL459" class="sline"><span class="sln">459</span><span class="sc">            by_stem[stem] = (path, score)</span></div>
+<div id="SL460" class="sline"><span class="sln">460</span><span class="sc">    pre_dedup = len(file_scores)</span></div>
+<div id="SL461" class="sline"><span class="sln">461</span><span class="sc">    file_scores_new = {p: s for p, s in by_stem.values()}</span></div>
+<div id="SL462" class="sline"><span class="sln">462</span><span class="sc">    # file_meta must stay in sync with file_scores after dedup</span></div>
+<div id="SL463" class="sline"><span class="sln">463</span><span class="sc">    file_meta = {p: file_meta[p] for p in file_scores_new if p in file_meta}</span></div>
+<div id="SL464" class="sline"><span class="sln">464</span><span class="sc">    file_scores = file_scores_new</span></div>
+<div id="SL465" class="sline"><span class="sln">465</span><span class="sc">    if pre_dedup != len(file_scores):</span></div>
+<div id="SL466" class="sline"><span class="sln">466</span><span class="sc">        tprint(f&#x27;Stem dedup: {pre_dedup} → {len(file_scores)} unique stems (emails + files collapsed)&#x27;)</span></div>
+<div id="SL467" class="sline"><span class="sln">467</span><span class="sc">&nbsp;</span></div>
+<div id="SL468" class="sline"><span class="sln">468</span><span class="sc">    # Sort by score descending, take top N files</span></div>
+<div id="SL469" class="sline"><span class="sln">469</span><span class="sc">    ranked = sorted(file_scores.items(), key=lambda x: -x[1])[:n]</span></div>
+<div id="SL470" class="sline"><span class="sln">470</span><span class="sc">    tprint(f&#x27;{len(ranked)} unique files from {len(queries)} queries in {time.time()-t0:.1f}s&#x27;)</span></div>
+<div id="SL471" class="sline"><span class="sln">471</span><span class="sc">    if ranked:</span></div>
+<div id="SL472" class="sline"><span class="sln">472</span><span class="sc">        tprint(f&#x27;Score range: {ranked[0][1]:.3f} — {ranked[-1][1]:.3f}&#x27;)</span></div>
+<div id="SL473" class="sline"><span class="sln">473</span><span class="sc">        for i, (p, s) in enumerate(ranked[:10]):</span></div>
+<div id="SL474" class="sline"><span class="sln">474</span><span class="sc">            tprint(f&#x27;  {i+1:2d}. [{s:.3f}] {os.path.basename(p)}&#x27;)</span></div>
+<div id="SL475" class="sline"><span class="sln">475</span><span class="sc">        if len(ranked) &gt; 10:</span></div>
+<div id="SL476" class="sline"><span class="sln">476</span><span class="sc">            tprint(f&#x27;  ... +{len(ranked)-10} more files&#x27;)</span></div>
+<div id="SL477" class="sline"><span class="sln">477</span><span class="sc">    # Return: (ranked list for Step 3, full dicts for Step 2b deep loop)</span></div>
+<div id="SL478" class="sline"><span class="sln">478</span><span class="sc">    return [(path, score, file_meta[path]) for path, score in ranked], file_scores, file_meta, file_embeds</span></div>
+<div id="SL479" class="sline"><span class="sln">479</span><span class="sc">&nbsp;</span></div>
+<div id="SL480" class="sline"><span class="sln">480</span><span class="sc">&nbsp;</span></div>
+<div id="SL481" class="sline"><span class="sln">481</span><span class="sc">def _search_chromadb(queries, file_scores, file_meta):</span></div>
+<div id="SL482" class="sline"><span class="sln">482</span><span class="sc">    &quot;&quot;&quot;Helper for Step 2b: run more queries, MERGE into existing dicts.</span></div>
+<div id="SL483" class="sline"><span class="sln">483</span><span class="sc">    Used when the deep loop finds new search terms. Returns count of newly-found files.</span></div>
+<div id="SL484" class="sline"><span class="sln">484</span><span class="sc">    &quot;&quot;&quot;</span></div>
+<div id="SL485" class="sline"><span class="sln">485</span><span class="sc">    import cohere, chromadb</span></div>
+<div id="SL486" class="sline"><span class="sln">486</span><span class="sc">    co = cohere.ClientV2(api_key=os.environ[&#x27;COHERE_API_KEY&#x27;])</span></div>
+<div id="SL487" class="sline"><span class="sln">487</span><span class="sc">    resp = co.embed(</span></div>
+<div id="SL488" class="sline"><span class="sln">488</span><span class="sc">        texts=queries, model=&#x27;embed-multilingual-v3.0&#x27;,</span></div>
+<div id="SL489" class="sline"><span class="sln">489</span><span class="sc">        input_type=&#x27;search_query&#x27;, embedding_types=[&#x27;float&#x27;]</span></div>
+<div id="SL490" class="sline"><span class="sln">490</span><span class="sc">    )</span></div>
+<div id="SL491" class="sline"><span class="sln">491</span><span class="sc">    col = chromadb.PersistentClient(path=CHROMA_PATH).get_collection(COLLECTION)</span></div>
+<div id="SL492" class="sline"><span class="sln">492</span><span class="sc">    new_found = 0</span></div>
+<div id="SL493" class="sline"><span class="sln">493</span><span class="sc">    for i, qvec in enumerate(resp.embeddings.float_):</span></div>
+<div id="SL494" class="sline"><span class="sln">494</span><span class="sc">        results = col.query(query_embeddings=[qvec], n_results=50)</span></div>
+<div id="SL495" class="sline"><span class="sln">495</span><span class="sc">        for doc, meta, dist in zip(</span></div>
+<div id="SL496" class="sline"><span class="sln">496</span><span class="sc">                results[&#x27;documents&#x27;][0], results[&#x27;metadatas&#x27;][0],</span></div>
+<div id="SL497" class="sline"><span class="sln">497</span><span class="sc">                results[&#x27;distances&#x27;][0]):</span></div>
+<div id="SL498" class="sline"><span class="sln">498</span><span class="sc">            path = meta[&#x27;path&#x27;]</span></div>
+<div id="SL499" class="sline"><span class="sln">499</span><span class="sc">            score = 1 - dist</span></div>
+<div id="SL500" class="sline"><span class="sln">500</span><span class="sc">            if path not in file_scores:</span></div>
+<div id="SL501" class="sline"><span class="sln">501</span><span class="sc">                new_found += 1     # Track only fresh discoveries (not score updates)</span></div>
+<div id="SL502" class="sline"><span class="sln">502</span><span class="sc">            if path not in file_scores or score &gt; file_scores[path]:</span></div>
+<div id="SL503" class="sline"><span class="sln">503</span><span class="sc">                file_scores[path] = score</span></div>
+<div id="SL504" class="sline"><span class="sln">504</span><span class="sc">                file_meta[path] = meta</span></div>
+<div id="SL505" class="sline"><span class="sln">505</span><span class="sc">    return new_found</span></div>
+<div id="SL506" class="sline"><span class="sln">506</span><span class="sc">&nbsp;</span></div>
+<div id="SL507" class="sline"><span class="sln">507</span><span class="sc">&nbsp;</span></div>
+<div id="SL508" class="sline"><span class="sln">508</span><span class="sc"># ── MMR selector ──────────────────────────────────────────────────</span></div>
+<div id="SL509" class="sline"><span class="sln">509</span><span class="sc"># MMR = Maximal Marginal Relevance (Carbonell &amp; Goldstein, 1998)</span></div>
+<div id="SL510" class="sline"><span class="sln">510</span><span class="sc"># Used in Step 2b deep loop to pick files that are BOTH relevant AND different</span></div>
+<div id="SL511" class="sline"><span class="sln">511</span><span class="sc"># from each other. Without this, we&#x27;d just read the top 10 most similar files,</span></div>
+<div id="SL512" class="sline"><span class="sln">512</span><span class="sc"># which are often near-duplicates and give no new search terms.</span></div>
+<div id="SL513" class="sline"><span class="sln">513</span><span class="sc">#</span></div>
+<div id="SL514" class="sline"><span class="sln">514</span><span class="sc"># Formula per candidate:  MMR = λ·relevance − (1−λ)·max_similarity_to_selected</span></div>
+<div id="SL515" class="sline"><span class="sln">515</span><span class="sc">#   λ=1.0 → pure relevance (same as sorting by score)</span></div>
+<div id="SL516" class="sline"><span class="sln">516</span><span class="sc">#   λ=0.0 → pure diversity (least similar to selected)</span></div>
+<div id="SL517" class="sline"><span class="sln">517</span><span class="sc">#   λ=0.7 → default: 70% relevance weight, 30% diversity</span></div>
+<div id="SL518" class="sline"><span class="sln">518</span><span class="sc">def _mmr_select(file_scores, file_embeds, already_read, k=10, lam=0.7):</span></div>
+<div id="SL519" class="sline"><span class="sln">519</span><span class="sc">    &quot;&quot;&quot;Select k files balancing relevance (score) and diversity (MMR).</span></div>
+<div id="SL520" class="sline"><span class="sln">520</span><span class="sc">    already_read: paths to exclude (already processed in previous loops)</span></div>
+<div id="SL521" class="sline"><span class="sln">521</span><span class="sc">    Returns: list of (path, score) tuples in selection order.</span></div>
+<div id="SL522" class="sline"><span class="sln">522</span><span class="sc">    &quot;&quot;&quot;</span></div>
+<div id="SL523" class="sline"><span class="sln">523</span><span class="sc">    import numpy as np</span></div>
+<div id="SL524" class="sline"><span class="sln">524</span><span class="sc">&nbsp;</span></div>
+<div id="SL525" class="sline"><span class="sln">525</span><span class="sc">    # Candidates = files with known embeddings, not yet read</span></div>
+<div id="SL526" class="sline"><span class="sln">526</span><span class="sc">    candidates = [(p, s) for p, s in file_scores.items() if p not in already_read and p in file_embeds]</span></div>
+<div id="SL527" class="sline"><span class="sln">527</span><span class="sc">    if not candidates:</span></div>
+<div id="SL528" class="sline"><span class="sln">528</span><span class="sc">        return []</span></div>
+<div id="SL529" class="sline"><span class="sln">529</span><span class="sc">&nbsp;</span></div>
+<div id="SL530" class="sline"><span class="sln">530</span><span class="sc">    # Normalize scores to [0,1] so relevance and similarity are on the same scale</span></div>
+<div id="SL531" class="sline"><span class="sln">531</span><span class="sc">    scores = {p: s for p, s in candidates}</span></div>
+<div id="SL532" class="sline"><span class="sln">532</span><span class="sc">    max_s = max(scores.values())</span></div>
+<div id="SL533" class="sline"><span class="sln">533</span><span class="sc">    min_s = min(scores.values())</span></div>
+<div id="SL534" class="sline"><span class="sln">534</span><span class="sc">    rng = max_s - min_s if max_s &gt; min_s else 1.0   # Avoid divide-by-zero</span></div>
+<div id="SL535" class="sline"><span class="sln">535</span><span class="sc">&nbsp;</span></div>
+<div id="SL536" class="sline"><span class="sln">536</span><span class="sc">    selected = []           # [(path, score), ...] in selection order</span></div>
+<div id="SL537" class="sline"><span class="sln">537</span><span class="sc">    selected_embeds = []    # Matching embeddings as numpy arrays (for fast cosine sim)</span></div>
+<div id="SL538" class="sline"><span class="sln">538</span><span class="sc">&nbsp;</span></div>
+<div id="SL539" class="sline"><span class="sln">539</span><span class="sc">    # Seed with already-read files: treat them as &quot;already in the set&quot; so MMR</span></div>
+<div id="SL540" class="sline"><span class="sln">540</span><span class="sc">    # picks files DIFFERENT from what we&#x27;ve seen in previous loops.</span></div>
+<div id="SL541" class="sline"><span class="sln">541</span><span class="sc">    for p in already_read:</span></div>
+<div id="SL542" class="sline"><span class="sln">542</span><span class="sc">        if p in file_embeds:</span></div>
+<div id="SL543" class="sline"><span class="sln">543</span><span class="sc">            selected_embeds.append(np.array(file_embeds[p], dtype=np.float32))</span></div>
+<div id="SL544" class="sline"><span class="sln">544</span><span class="sc">&nbsp;</span></div>
+<div id="SL545" class="sline"><span class="sln">545</span><span class="sc">    # Greedy selection: pick one file at a time that maximizes MMR score</span></div>
+<div id="SL546" class="sline"><span class="sln">546</span><span class="sc">    for _ in range(min(k, len(candidates))):</span></div>
+<div id="SL547" class="sline"><span class="sln">547</span><span class="sc">        best_path = None</span></div>
+<div id="SL548" class="sline"><span class="sln">548</span><span class="sc">        best_mmr = -999</span></div>
+<div id="SL549" class="sline"><span class="sln">549</span><span class="sc">&nbsp;</span></div>
+<div id="SL550" class="sline"><span class="sln">550</span><span class="sc">        for p, s in candidates:</span></div>
+<div id="SL551" class="sline"><span class="sln">551</span><span class="sc">            if p in [x[0] for x in selected]:</span></div>
+<div id="SL552" class="sline"><span class="sln">552</span><span class="sc">                continue</span></div>
+<div id="SL553" class="sline"><span class="sln">553</span><span class="sc">            norm_score = (s - min_s) / rng      # Relevance component (0-1)</span></div>
+<div id="SL554" class="sline"><span class="sln">554</span><span class="sc">            emb = np.array(file_embeds[p], dtype=np.float32)</span></div>
+<div id="SL555" class="sline"><span class="sln">555</span><span class="sc">&nbsp;</span></div>
+<div id="SL556" class="sline"><span class="sln">556</span><span class="sc">            # Diversity component: find the MAX cosine similarity to any</span></div>
+<div id="SL557" class="sline"><span class="sln">557</span><span class="sc">            # already-selected or already-read file (we want to minimize this).</span></div>
+<div id="SL558" class="sline"><span class="sln">558</span><span class="sc">            max_sim = 0.0</span></div>
+<div id="SL559" class="sline"><span class="sln">559</span><span class="sc">            for se in selected_embeds:</span></div>
+<div id="SL560" class="sline"><span class="sln">560</span><span class="sc">                cos = float(np.dot(emb, se) / (np.linalg.norm(emb) * np.linalg.norm(se) + 1e-9))</span></div>
+<div id="SL561" class="sline"><span class="sln">561</span><span class="sc">                if cos &gt; max_sim:</span></div>
+<div id="SL562" class="sline"><span class="sln">562</span><span class="sc">                    max_sim = cos</span></div>
+<div id="SL563" class="sline"><span class="sln">563</span><span class="sc">&nbsp;</span></div>
+<div id="SL564" class="sline"><span class="sln">564</span><span class="sc">            # MMR formula: reward relevance, penalize similarity to what we have</span></div>
+<div id="SL565" class="sline"><span class="sln">565</span><span class="sc">            mmr = lam * norm_score - (1 - lam) * max_sim</span></div>
+<div id="SL566" class="sline"><span class="sln">566</span><span class="sc">            if mmr &gt; best_mmr:</span></div>
+<div id="SL567" class="sline"><span class="sln">567</span><span class="sc">                best_mmr = mmr</span></div>
+<div id="SL568" class="sline"><span class="sln">568</span><span class="sc">                best_path = p</span></div>
+<div id="SL569" class="sline"><span class="sln">569</span><span class="sc">&nbsp;</span></div>
+<div id="SL570" class="sline"><span class="sln">570</span><span class="sc">        if best_path is None:</span></div>
+<div id="SL571" class="sline"><span class="sln">571</span><span class="sc">            break</span></div>
+<div id="SL572" class="sline"><span class="sln">572</span><span class="sc">        selected.append((best_path, scores[best_path]))</span></div>
+<div id="SL573" class="sline"><span class="sln">573</span><span class="sc">        selected_embeds.append(np.array(file_embeds[best_path], dtype=np.float32))</span></div>
+<div id="SL574" class="sline"><span class="sln">574</span><span class="sc">&nbsp;</span></div>
+<div id="SL575" class="sline"><span class="sln">575</span><span class="sc">    return selected</span></div>
+<div id="SL576" class="sline"><span class="sln">576</span><span class="sc">&nbsp;</span></div>
+<div id="SL577" class="sline"><span class="sln">577</span><span class="sc">&nbsp;</span></div>
+<div id="SL578" class="sline"><span class="sln">578</span><span class="sc"># ── Step 2b: Deep retrieval loop ──────────────────────────────────</span></div>
+<div id="SL579" class="sline"><span class="sln">579</span><span class="sc"># INPUT:  query (original), file_scores/meta/embeds (from Step 2)</span></div>
+<div id="SL580" class="sline"><span class="sln">580</span><span class="sc"># OUTPUT: expanded ranked list (Step 2 results + files discovered by new terms)</span></div>
+<div id="SL581" class="sline"><span class="sln">581</span><span class="sc"># METHOD: loop up to 3 times:</span></div>
+<div id="SL582" class="sline"><span class="sln">582</span><span class="sc">#           1. MMR-pick 10 diverse files from current top results</span></div>
+<div id="SL583" class="sline"><span class="sln">583</span><span class="sc">#           2. Extract first 500 chars of each</span></div>
+<div id="SL584" class="sline"><span class="sln">584</span><span class="sc">#           3. Ask Claude: &quot;what NEW search terms would find more files?&quot;</span></div>
+<div id="SL585" class="sline"><span class="sln">585</span><span class="sc">#           4. Embed those terms, run ChromaDB again, merge results</span></div>
+<div id="SL586" class="sline"><span class="sln">586</span><span class="sc"># WHY:    Vector search misses files that use different vocabulary. After reading</span></div>
+<div id="SL587" class="sline"><span class="sln">587</span><span class="sc">#         some results we know the domain jargon, so we can find semantic siblings.</span></div>
+<div id="SL588" class="sline"><span class="sln">588</span><span class="sc">#         Stops early if no new terms or no new files found.</span></div>
+<div id="SL589" class="sline"><span class="sln">589</span><span class="sc">def step_deep_retrieve(query, file_scores, file_meta, file_embeds):</span></div>
+<div id="SL590" class="sline"><span class="sln">590</span><span class="sc">    &quot;&quot;&quot;Read diverse results (MMR), extract new search terms, search again. Repeat.&quot;&quot;&quot;</span></div>
+<div id="SL591" class="sline"><span class="sln">591</span><span class="sc">    import cohere, chromadb</span></div>
+<div id="SL592" class="sline"><span class="sln">592</span><span class="sc">&nbsp;</span></div>
+<div id="SL593" class="sline"><span class="sln">593</span><span class="sc">    already_read = set()    # Track files we&#x27;ve already peeked at — don&#x27;t re-read</span></div>
+<div id="SL594" class="sline"><span class="sln">594</span><span class="sc">&nbsp;</span></div>
+<div id="SL595" class="sline"><span class="sln">595</span><span class="sc">    for loop_num in range(1, DEEP_MAX_LOOPS + 1):</span></div>
+<div id="SL596" class="sline"><span class="sln">596</span><span class="sc">        print(f&#x27;\n=== STEP 2b: Deep loop {loop_num}/{DEEP_MAX_LOOPS} ===&#x27;, flush=True)</span></div>
+<div id="SL597" class="sline"><span class="sln">597</span><span class="sc">        t0 = time.time()</span></div>
+<div id="SL598" class="sline"><span class="sln">598</span><span class="sc">&nbsp;</span></div>
+<div id="SL599" class="sline"><span class="sln">599</span><span class="sc">        # Pick 10 diverse files via MMR (not just top 10 by score, which would</span></div>
+<div id="SL600" class="sline"><span class="sln">600</span><span class="sc">        # be near-duplicates). λ=0.7 = 70% relevance weight, 30% diversity.</span></div>
+<div id="SL601" class="sline"><span class="sln">601</span><span class="sc">        mmr_picks = _mmr_select(file_scores, file_embeds, already_read,</span></div>
+<div id="SL602" class="sline"><span class="sln">602</span><span class="sc">                                k=DEEP_PEEK_FILES, lam=0.7)</span></div>
+<div id="SL603" class="sline"><span class="sln">603</span><span class="sc">        if not mmr_picks:</span></div>
+<div id="SL604" class="sline"><span class="sln">604</span><span class="sc">            tprint(&#x27;No more files to read — stopping&#x27;)</span></div>
+<div id="SL605" class="sline"><span class="sln">605</span><span class="sc">            break</span></div>
+<div id="SL606" class="sline"><span class="sln">606</span><span class="sc">&nbsp;</span></div>
+<div id="SL607" class="sline"><span class="sln">607</span><span class="sc">        tprint(f&#x27;MMR selected {len(mmr_picks)} diverse files:&#x27;)</span></div>
+<div id="SL608" class="sline"><span class="sln">608</span><span class="sc">        for p, s in mmr_picks:</span></div>
+<div id="SL609" class="sline"><span class="sln">609</span><span class="sc">            tprint(f&#x27;  [{s:.3f}] {os.path.basename(p)}&#x27;)</span></div>
+<div id="SL610" class="sline"><span class="sln">610</span><span class="sc">&nbsp;</span></div>
+<div id="SL611" class="sline"><span class="sln">611</span><span class="sc">        # Extract small snippets (500 chars each) — just enough for Claude to</span></div>
+<div id="SL612" class="sline"><span class="sln">612</span><span class="sc">        # recognize domain vocabulary, not enough to overflow its context.</span></div>
+<div id="SL613" class="sline"><span class="sln">613</span><span class="sc">        snippets = []</span></div>
+<div id="SL614" class="sline"><span class="sln">614</span><span class="sc">        for path, score in mmr_picks:</span></div>
+<div id="SL615" class="sline"><span class="sln">615</span><span class="sc">            already_read.add(path)      # Mark so MMR won&#x27;t pick again next loop</span></div>
+<div id="SL616" class="sline"><span class="sln">616</span><span class="sc">            text = extract_text(path, max_chars=1000)</span></div>
+<div id="SL617" class="sline"><span class="sln">617</span><span class="sc">            fname = os.path.basename(path)</span></div>
+<div id="SL618" class="sline"><span class="sln">618</span><span class="sc">            snippets.append(f&#x27;[{score:.3f}] {fname}: {text[:500]}&#x27;)</span></div>
+<div id="SL619" class="sline"><span class="sln">619</span><span class="sc">        snippets_text = &#x27;\n\n&#x27;.join(snippets)</span></div>
+<div id="SL620" class="sline"><span class="sln">620</span><span class="sc">&nbsp;</span></div>
+<div id="SL621" class="sline"><span class="sln">621</span><span class="sc">        # Ask Claude: what NEW terms should we search for?</span></div>
+<div id="SL622" class="sline"><span class="sln">622</span><span class="sc">        prompt = (</span></div>
+<div id="SL623" class="sline"><span class="sln">623</span><span class="sc">            f&#x27;You are helping a document search system find MORE relevant files.\n\n&#x27;</span></div>
+<div id="SL624" class="sline"><span class="sln">624</span><span class="sc">            f&#x27;ORIGINAL QUESTION: {query}\n\n&#x27;</span></div>
+<div id="SL625" class="sline"><span class="sln">625</span><span class="sc">            f&#x27;We already found these {len(mmr_picks)} files:\n{snippets_text}\n\n&#x27;</span></div>
+<div id="SL626" class="sline"><span class="sln">626</span><span class="sc">            f&#x27;Based on what these files mention, what NEW search terms should we use &#x27;</span></div>
+<div id="SL627" class="sline"><span class="sln">627</span><span class="sc">            f&#x27;to find ADDITIONAL relevant files that our current search missed?\n&#x27;</span></div>
+<div id="SL628" class="sline"><span class="sln">628</span><span class="sc">            f&#x27;Look for: referenced documents, technical terms, people mentioned, &#x27;</span></div>
+<div id="SL629" class="sline"><span class="sln">629</span><span class="sc">            f&#x27;project names, equipment, specific events, file names mentioned in emails.\n\n&#x27;</span></div>
+<div id="SL630" class="sline"><span class="sln">630</span><span class="sc">            f&#x27;Return ONLY a JSON list of 3-5 new search phrases. &#x27;</span></div>
+<div id="SL631" class="sline"><span class="sln">631</span><span class="sc">            f&#x27;Do NOT repeat terms we already searched for.\n&#x27;</span></div>
+<div id="SL632" class="sline"><span class="sln">632</span><span class="sc">            f&#x27;Example: [&quot;πυρασφάλεια αισθητήρες ΕΔΣ&quot;, &quot;ΣχολιαIntracom&quot;, &quot;site visit report&quot;]\n&#x27;</span></div>
+<div id="SL633" class="sline"><span class="sln">633</span><span class="sc">        )</span></div>
+<div id="SL634" class="sline"><span class="sln">634</span><span class="sc">        raw = run_claude(prompt, timeout=45)</span></div>
+<div id="SL635" class="sline"><span class="sln">635</span><span class="sc">&nbsp;</span></div>
+<div id="SL636" class="sline"><span class="sln">636</span><span class="sc">        # Parse Claude&#x27;s JSON array of new search terms</span></div>
+<div id="SL637" class="sline"><span class="sln">637</span><span class="sc">        match = re.search(r&#x27;\[.*\]&#x27;, raw, re.DOTALL)</span></div>
+<div id="SL638" class="sline"><span class="sln">638</span><span class="sc">        new_terms = []</span></div>
+<div id="SL639" class="sline"><span class="sln">639</span><span class="sc">        if match:</span></div>
+<div id="SL640" class="sline"><span class="sln">640</span><span class="sc">            try:</span></div>
+<div id="SL641" class="sline"><span class="sln">641</span><span class="sc">                new_terms = json.loads(match.group())</span></div>
+<div id="SL642" class="sline"><span class="sln">642</span><span class="sc">            except json.JSONDecodeError:</span></div>
+<div id="SL643" class="sline"><span class="sln">643</span><span class="sc">                pass</span></div>
+<div id="SL644" class="sline"><span class="sln">644</span><span class="sc">&nbsp;</span></div>
+<div id="SL645" class="sline"><span class="sln">645</span><span class="sc">        # Early exit: Claude couldn&#x27;t think of anything new</span></div>
+<div id="SL646" class="sline"><span class="sln">646</span><span class="sc">        if not new_terms:</span></div>
+<div id="SL647" class="sline"><span class="sln">647</span><span class="sc">            tprint(f&#x27;No new terms found — stopping deep search&#x27;)</span></div>
+<div id="SL648" class="sline"><span class="sln">648</span><span class="sc">            break</span></div>
+<div id="SL649" class="sline"><span class="sln">649</span><span class="sc">&nbsp;</span></div>
+<div id="SL650" class="sline"><span class="sln">650</span><span class="sc">        tprint(f&#x27;New terms from loop {loop_num}:&#x27;)</span></div>
+<div id="SL651" class="sline"><span class="sln">651</span><span class="sc">        for t in new_terms:</span></div>
+<div id="SL652" class="sline"><span class="sln">652</span><span class="sc">            tprint(f&#x27;  + {t}&#x27;)</span></div>
+<div id="SL653" class="sline"><span class="sln">653</span><span class="sc">&nbsp;</span></div>
+<div id="SL654" class="sline"><span class="sln">654</span><span class="sc">        # Run the new terms through ChromaDB and merge results.</span></div>
+<div id="SL655" class="sline"><span class="sln">655</span><span class="sc">        # _search_chromadb only increments new_found for actually-new paths.</span></div>
+<div id="SL656" class="sline"><span class="sln">656</span><span class="sc">        prev_count = len(file_scores)</span></div>
+<div id="SL657" class="sline"><span class="sln">657</span><span class="sc">        new_found = _search_chromadb(new_terms, file_scores, file_meta)</span></div>
+<div id="SL658" class="sline"><span class="sln">658</span><span class="sc">        tprint(f&#x27;Found {new_found} new files ({prev_count} → {len(file_scores)}) in {time.time()-t0:.1f}s&#x27;)</span></div>
+<div id="SL659" class="sline"><span class="sln">659</span><span class="sc">&nbsp;</span></div>
+<div id="SL660" class="sline"><span class="sln">660</span><span class="sc">        # Early exit: search saturated (found nothing beyond what we already have)</span></div>
+<div id="SL661" class="sline"><span class="sln">661</span><span class="sc">        if new_found == 0:</span></div>
+<div id="SL662" class="sline"><span class="sln">662</span><span class="sc">            tprint(f&#x27;No new files discovered — stopping deep search&#x27;)</span></div>
+<div id="SL663" class="sline"><span class="sln">663</span><span class="sc">            break</span></div>
+<div id="SL664" class="sline"><span class="sln">664</span><span class="sc">&nbsp;</span></div>
+<div id="SL665" class="sline"><span class="sln">665</span><span class="sc">    # After all loops: re-rank the full set (original + deep discoveries)</span></div>
+<div id="SL666" class="sline"><span class="sln">666</span><span class="sc">    ranked = sorted(file_scores.items(), key=lambda x: -x[1])[:MAX_FILES]</span></div>
+<div id="SL667" class="sline"><span class="sln">667</span><span class="sc">    tprint(f&#x27;Deep search complete: {len(file_scores)} total unique files, keeping top {len(ranked)}&#x27;)</span></div>
+<div id="SL668" class="sline"><span class="sln">668</span><span class="sc">    if ranked:</span></div>
+<div id="SL669" class="sline"><span class="sln">669</span><span class="sc">        tprint(f&#x27;Score range after deep: {ranked[0][1]:.3f} — {ranked[-1][1]:.3f}&#x27;)</span></div>
+<div id="SL670" class="sline"><span class="sln">670</span><span class="sc">        for i, (p, s) in enumerate(ranked[:5]):</span></div>
+<div id="SL671" class="sline"><span class="sln">671</span><span class="sc">            tprint(f&#x27;  {i+1}. [{s:.3f}] {os.path.basename(p)}&#x27;)</span></div>
+<div id="SL672" class="sline"><span class="sln">672</span><span class="sc">        if len(ranked) &gt; 5:</span></div>
+<div id="SL673" class="sline"><span class="sln">673</span><span class="sc">            tprint(f&#x27;  ... +{len(ranked)-5} more&#x27;)</span></div>
+<div id="SL674" class="sline"><span class="sln">674</span><span class="sc">    return [(path, score, file_meta[path]) for path, score in ranked]</span></div>
+<div id="SL675" class="sline"><span class="sln">675</span><span class="sc">&nbsp;</span></div>
+<div id="SL676" class="sline"><span class="sln">676</span><span class="sc">&nbsp;</span></div>
+<div id="SL677" class="sline"><span class="sln">677</span><span class="sc"># ── Step 3: Extract text ─────────────────────────────────────────</span></div>
+<div id="SL678" class="sline"><span class="sln">678</span><span class="sc"># INPUT:  top N (files, score, meta) tuples from Step 2</span></div>
+<div id="SL679" class="sline"><span class="sln">679</span><span class="sc"># OUTPUT: list of dicts with extracted text ready for Step 4 agents</span></div>
+<div id="SL680" class="sline"><span class="sln">680</span><span class="sc"># METHOD: dispatches each file through extract_text() which handles 10+ formats</span></div>
+<div id="SL681" class="sline"><span class="sln">681</span><span class="sc"># NOTE:   sequential (not parallelized) — most extractors are fast, and parallel</span></div>
+<div id="SL682" class="sline"><span class="sln">682</span><span class="sc">#         pdftotext/antiword would just contend for CPU.</span></div>
+<div id="SL683" class="sline"><span class="sln">683</span><span class="sc">def step_extract(files):</span></div>
+<div id="SL684" class="sline"><span class="sln">684</span><span class="sc">    print(f&#x27;\n=== STEP 3: Extract text from {len(files)} files ===&#x27;, flush=True)</span></div>
+<div id="SL685" class="sline"><span class="sln">685</span><span class="sc">    t0 = time.time()</span></div>
+<div id="SL686" class="sline"><span class="sln">686</span><span class="sc">    extracted = []</span></div>
+<div id="SL687" class="sline"><span class="sln">687</span><span class="sc">    errors = 0</span></div>
+<div id="SL688" class="sline"><span class="sln">688</span><span class="sc">    ext_counts = {}             # extension → count (for diagnostics)</span></div>
+<div id="SL689" class="sline"><span class="sln">689</span><span class="sc">    for path, score, meta in files:</span></div>
+<div id="SL690" class="sline"><span class="sln">690</span><span class="sc">        text = extract_text(path)</span></div>
+<div id="SL691" class="sline"><span class="sln">691</span><span class="sc">        e = meta.get(&#x27;ext&#x27;, os.path.splitext(path)[1])</span></div>
+<div id="SL692" class="sline"><span class="sln">692</span><span class="sc">        ext_counts[e] = ext_counts.get(e, 0) + 1</span></div>
+<div id="SL693" class="sline"><span class="sln">693</span><span class="sc">        # Detect extraction failures: extract_text returns &quot;[error ...]&quot; / &quot;[... failed]&quot;</span></div>
+<div id="SL694" class="sline"><span class="sln">694</span><span class="sc">        if text.startswith(&#x27;[&#x27;) and (&#x27;error&#x27; in text or &#x27;failed&#x27; in text):</span></div>
+<div id="SL695" class="sline"><span class="sln">695</span><span class="sc">            errors += 1</span></div>
+<div id="SL696" class="sline"><span class="sln">696</span><span class="sc">            tprint(f&#x27;  FAIL: {os.path.basename(path)} — {text[:60]}&#x27;)</span></div>
+<div id="SL697" class="sline"><span class="sln">697</span><span class="sc">        # Flatten to a dict the agents will consume</span></div>
+<div id="SL698" class="sline"><span class="sln">698</span><span class="sc">        extracted.append({</span></div>
+<div id="SL699" class="sline"><span class="sln">699</span><span class="sc">            &#x27;path&#x27;: path,</span></div>
+<div id="SL700" class="sline"><span class="sln">700</span><span class="sc">            &#x27;score&#x27;: score,                          # Vector similarity from Step 2</span></div>
+<div id="SL701" class="sline"><span class="sln">701</span><span class="sc">            &#x27;filename&#x27;: os.path.basename(path),</span></div>
+<div id="SL702" class="sline"><span class="sln">702</span><span class="sc">            &#x27;folder&#x27;: meta.get(&#x27;folder&#x27;, &#x27;&#x27;),</span></div>
+<div id="SL703" class="sline"><span class="sln">703</span><span class="sc">            &#x27;ext&#x27;: meta.get(&#x27;ext&#x27;, &#x27;&#x27;),</span></div>
+<div id="SL704" class="sline"><span class="sln">704</span><span class="sc">            &#x27;text&#x27;: text                             # Up to MAX_FILE_CHARS chars</span></div>
+<div id="SL705" class="sline"><span class="sln">705</span><span class="sc">        })</span></div>
+<div id="SL706" class="sline"><span class="sln">706</span><span class="sc">    ok = len(extracted) - errors</span></div>
+<div id="SL707" class="sline"><span class="sln">707</span><span class="sc">    ext_str = &#x27;, &#x27;.join(f&#x27;{v}×{k}&#x27; for k, v in sorted(ext_counts.items(), key=lambda x: -x[1]))</span></div>
+<div id="SL708" class="sline"><span class="sln">708</span><span class="sc">    tprint(f&#x27;Extracted {ok} OK, {errors} errors in {time.time()-t0:.1f}s&#x27;)</span></div>
+<div id="SL709" class="sline"><span class="sln">709</span><span class="sc">    tprint(f&#x27;Types: {ext_str}&#x27;)</span></div>
+<div id="SL710" class="sline"><span class="sln">710</span><span class="sc">    total_chars = sum(len(f[&#x27;text&#x27;]) for f in extracted)</span></div>
+<div id="SL711" class="sline"><span class="sln">711</span><span class="sc">    tprint(f&#x27;Total text: {total_chars:,} chars ({total_chars/1000:.0f}K)&#x27;)</span></div>
+<div id="SL712" class="sline"><span class="sln">712</span><span class="sc">    return extracted</span></div>
+<div id="SL713" class="sline"><span class="sln">713</span><span class="sc">&nbsp;</span></div>
+<div id="SL714" class="sline"><span class="sln">714</span><span class="sc">&nbsp;</span></div>
+<div id="SL715" class="sline"><span class="sln">715</span><span class="sc"># ── Step 4: Parallel agents ──────────────────────────────────────</span></div>
+<div id="SL716" class="sline"><span class="sln">716</span><span class="sc"># INPUT:  query + list of ~100 extracted file dicts</span></div>
+<div id="SL717" class="sline"><span class="sln">717</span><span class="sc"># OUTPUT: list of agent_results, each with parsed rankings per batch</span></div>
+<div id="SL718" class="sline"><span class="sln">718</span><span class="sc"># METHOD: split 100 files into batches of 10 → launch 10 Claude subprocesses</span></div>
+<div id="SL719" class="sline"><span class="sln">719</span><span class="sc">#         (max 6 concurrent) → each agent RANKS its 10 files (score 0-10) with reasons</span></div>
+<div id="SL720" class="sline"><span class="sln">720</span><span class="sc"># WHY:    Ranking 100 files in one Claude call would overflow context and lose</span></div>
+<div id="SL721" class="sline"><span class="sln">721</span><span class="sc">#         accuracy. Parallel agents = 10x speedup + better attention per file.</span></div>
+<div id="SL722" class="sline"><span class="sln">722</span><span class="sc"># COST:   10 claude -p calls × ~30s each = ~60s wall time (6-way parallel)</span></div>
+<div id="SL723" class="sline"><span class="sln">723</span><span class="sc">def step_agents(query, extracted):</span></div>
+<div id="SL724" class="sline"><span class="sln">724</span><span class="sc">    n_files = len(extracted)</span></div>
+<div id="SL725" class="sline"><span class="sln">725</span><span class="sc">    n_batches = (n_files + BATCH_SIZE - 1) // BATCH_SIZE     # ceil(n/BATCH_SIZE)</span></div>
+<div id="SL726" class="sline"><span class="sln">726</span><span class="sc">    print(f&#x27;\n=== STEP 4: {n_batches} parallel agents ({BATCH_SIZE} files each, {AGENT_WORKERS} workers) ===&#x27;, flush=True)</span></div>
+<div id="SL727" class="sline"><span class="sln">727</span><span class="sc">    t0 = time.time()</span></div>
+<div id="SL728" class="sline"><span class="sln">728</span><span class="sc">&nbsp;</span></div>
+<div id="SL729" class="sline"><span class="sln">729</span><span class="sc">    # Split into contiguous batches (preserves score-based ordering within each agent)</span></div>
+<div id="SL730" class="sline"><span class="sln">730</span><span class="sc">    batches = []</span></div>
+<div id="SL731" class="sline"><span class="sln">731</span><span class="sc">    for i in range(0, n_files, BATCH_SIZE):</span></div>
+<div id="SL732" class="sline"><span class="sln">732</span><span class="sc">        batches.append(extracted[i:i+BATCH_SIZE])</span></div>
+<div id="SL733" class="sline"><span class="sln">733</span><span class="sc">&nbsp;</span></div>
+<div id="SL734" class="sline"><span class="sln">734</span><span class="sc">    # Show batch assignments</span></div>
+<div id="SL735" class="sline"><span class="sln">735</span><span class="sc">    for i, batch in enumerate(batches):</span></div>
+<div id="SL736" class="sline"><span class="sln">736</span><span class="sc">        fnames = &#x27;, &#x27;.join(f[&#x27;filename&#x27;][:30] for f in batch[:4])</span></div>
+<div id="SL737" class="sline"><span class="sln">737</span><span class="sc">        more = f&#x27; +{len(batch)-4}&#x27; if len(batch) &gt; 4 else &#x27;&#x27;</span></div>
+<div id="SL738" class="sline"><span class="sln">738</span><span class="sc">        raw_chars = sum(len(f[&#x27;text&#x27;]) for f in batch)</span></div>
+<div id="SL739" class="sline"><span class="sln">739</span><span class="sc">        capped = f&#x27; → capped {MAX_AGENT_CHARS/1000:.0f}K&#x27; if raw_chars &gt; MAX_AGENT_CHARS else &#x27;&#x27;</span></div>
+<div id="SL740" class="sline"><span class="sln">740</span><span class="sc">        tprint(f&#x27;Agent {i+1}: {len(batch)} files ({raw_chars/1000:.0f}K chars{capped}) — {fnames}{more}&#x27;)</span></div>
+<div id="SL741" class="sline"><span class="sln">741</span><span class="sc">&nbsp;</span></div>
+<div id="SL742" class="sline"><span class="sln">742</span><span class="sc">    def run_agent(batch_idx, batch):</span></div>
+<div id="SL743" class="sline"><span class="sln">743</span><span class="sc">        &quot;&quot;&quot;Run ONE ranking agent on ONE batch of 10 files (called in ThreadPoolExecutor).&quot;&quot;&quot;</span></div>
+<div id="SL744" class="sline"><span class="sln">744</span><span class="sc">        # Build the files block, enforcing MAX_AGENT_CHARS total budget.</span></div>
+<div id="SL745" class="sline"><span class="sln">745</span><span class="sc">        # If a single file would overflow, truncate it (head+tail) so we keep</span></div>
+<div id="SL746" class="sline"><span class="sln">746</span><span class="sc">        # both the intro and the conclusion, which usually contain the most signal.</span></div>
+<div id="SL747" class="sline"><span class="sln">747</span><span class="sc">        file_block = []</span></div>
+<div id="SL748" class="sline"><span class="sln">748</span><span class="sc">        total_chars = 0</span></div>
+<div id="SL749" class="sline"><span class="sln">749</span><span class="sc">        for j, f in enumerate(batch):</span></div>
+<div id="SL750" class="sline"><span class="sln">750</span><span class="sc">            file_text = f[&#x27;text&#x27;]</span></div>
+<div id="SL751" class="sline"><span class="sln">751</span><span class="sc">            remaining = MAX_AGENT_CHARS - total_chars</span></div>
+<div id="SL752" class="sline"><span class="sln">752</span><span class="sc">            if remaining &lt; 1000:</span></div>
+<div id="SL753" class="sline"><span class="sln">753</span><span class="sc">                # Budget exhausted — include filename only (let agent know it exists)</span></div>
+<div id="SL754" class="sline"><span class="sln">754</span><span class="sc">                file_block.append(</span></div>
+<div id="SL755" class="sline"><span class="sln">755</span><span class="sc">                    f&#x27;--- FILE {j+1}: {f[&quot;filename&quot;]} ---\n&#x27;</span></div>
+<div id="SL756" class="sline"><span class="sln">756</span><span class="sc">                    f&#x27;Path: {f[&quot;path&quot;]}\n&#x27;</span></div>
+<div id="SL757" class="sline"><span class="sln">757</span><span class="sc">                    f&#x27;[text omitted — agent context full]\n&#x27;</span></div>
+<div id="SL758" class="sline"><span class="sln">758</span><span class="sc">                )</span></div>
+<div id="SL759" class="sline"><span class="sln">759</span><span class="sc">                continue</span></div>
+<div id="SL760" class="sline"><span class="sln">760</span><span class="sc">            if len(file_text) &gt; remaining:</span></div>
+<div id="SL761" class="sline"><span class="sln">761</span><span class="sc">                # Head+tail truncation: 80% start + 20% end + marker in between</span></div>
+<div id="SL762" class="sline"><span class="sln">762</span><span class="sc">                # Preserves opening context AND closing conclusions</span></div>
+<div id="SL763" class="sline"><span class="sln">763</span><span class="sc">                keep = remaining - 200</span></div>
+<div id="SL764" class="sline"><span class="sln">764</span><span class="sc">                head = int(keep * 0.8)</span></div>
+<div id="SL765" class="sline"><span class="sln">765</span><span class="sc">                tail = int(keep * 0.2)</span></div>
+<div id="SL766" class="sline"><span class="sln">766</span><span class="sc">                file_text = file_text[:head] + &#x27;\n[...truncated...]\n&#x27; + file_text[-tail:]</span></div>
+<div id="SL767" class="sline"><span class="sln">767</span><span class="sc">            total_chars += len(file_text)</span></div>
+<div id="SL768" class="sline"><span class="sln">768</span><span class="sc">            file_block.append(</span></div>
+<div id="SL769" class="sline"><span class="sln">769</span><span class="sc">                f&#x27;--- FILE {j+1}: {f[&quot;filename&quot;]} ---\n&#x27;</span></div>
+<div id="SL770" class="sline"><span class="sln">770</span><span class="sc">                f&#x27;Path: {f[&quot;path&quot;]}\n&#x27;</span></div>
+<div id="SL771" class="sline"><span class="sln">771</span><span class="sc">                f&#x27;Vector score: {f[&quot;score&quot;]:.3f}\n&#x27;</span></div>
+<div id="SL772" class="sline"><span class="sln">772</span><span class="sc">                f&#x27;{file_text}\n&#x27;</span></div>
+<div id="SL773" class="sline"><span class="sln">773</span><span class="sc">            )</span></div>
+<div id="SL774" class="sline"><span class="sln">774</span><span class="sc">        files_text = &#x27;\n&#x27;.join(file_block)</span></div>
+<div id="SL775" class="sline"><span class="sln">775</span><span class="sc">&nbsp;</span></div>
+<div id="SL776" class="sline"><span class="sln">776</span><span class="sc">        prompt = (</span></div>
+<div id="SL777" class="sline"><span class="sln">777</span><span class="sc">            f&#x27;You are evaluation agent #{batch_idx+1}. You have {len(batch)} files.\n&#x27;</span></div>
+<div id="SL778" class="sline"><span class="sln">778</span><span class="sc">            f&#x27;Your ONLY job is to RANK these files by relevance to the question.\n&#x27;</span></div>
+<div id="SL779" class="sline"><span class="sln">779</span><span class="sc">            f&#x27;Do NOT answer the question. Just evaluate each file.\n\n&#x27;</span></div>
+<div id="SL780" class="sline"><span class="sln">780</span><span class="sc">            f&#x27;USER QUESTION: {query}\n\n&#x27;</span></div>
+<div id="SL781" class="sline"><span class="sln">781</span><span class="sc">            f&#x27;FILES:\n{files_text}\n\n&#x27;</span></div>
+<div id="SL782" class="sline"><span class="sln">782</span><span class="sc">            f&#x27;INSTRUCTIONS:\n&#x27;</span></div>
+<div id="SL783" class="sline"><span class="sln">783</span><span class="sc">            f&#x27;For each file, score its relevance 0-10 (10=directly answers the question, &#x27;</span></div>
+<div id="SL784" class="sline"><span class="sln">784</span><span class="sc">            f&#x27;0=completely irrelevant). Give a one-line reason.\n\n&#x27;</span></div>
+<div id="SL785" class="sline"><span class="sln">785</span><span class="sc">            f&#x27;FORMAT your response EXACTLY as JSON:\n&#x27;</span></div>
+<div id="SL786" class="sline"><span class="sln">786</span><span class="sc">            f&#x27;{{&quot;rankings&quot;: [\n&#x27;</span></div>
+<div id="SL787" class="sline"><span class="sln">787</span><span class="sc">            f&#x27;  {{&quot;file&quot;: 1, &quot;filename&quot;: &quot;name.ext&quot;, &quot;score&quot;: 8, &quot;reason&quot;: &quot;why relevant&quot;}},\n&#x27;</span></div>
+<div id="SL788" class="sline"><span class="sln">788</span><span class="sc">            f&#x27;  ...\n&#x27;</span></div>
+<div id="SL789" class="sline"><span class="sln">789</span><span class="sc">            f&#x27;]}}\n&#x27;</span></div>
+<div id="SL790" class="sline"><span class="sln">790</span><span class="sc">            f&#x27;Return ONLY valid JSON. No other text.&#x27;</span></div>
+<div id="SL791" class="sline"><span class="sln">791</span><span class="sc">        )</span></div>
+<div id="SL792" class="sline"><span class="sln">792</span><span class="sc">&nbsp;</span></div>
+<div id="SL793" class="sline"><span class="sln">793</span><span class="sc">        # Call Claude (4-minute timeout — enough for complex Greek files)</span></div>
+<div id="SL794" class="sline"><span class="sln">794</span><span class="sc">        result = run_claude(prompt, timeout=240)</span></div>
+<div id="SL795" class="sline"><span class="sln">795</span><span class="sc">        # Retry strategy: if timeout, try with only half the files.</span></div>
+<div id="SL796" class="sline"><span class="sln">796</span><span class="sc">        # Common cause: one massive file pushing Claude&#x27;s thinking over the limit.</span></div>
+<div id="SL797" class="sline"><span class="sln">797</span><span class="sc">        if result == &#x27;[timeout]&#x27;:</span></div>
+<div id="SL798" class="sline"><span class="sln">798</span><span class="sc">            half = file_block[:len(file_block)//2]</span></div>
+<div id="SL799" class="sline"><span class="sln">799</span><span class="sc">            shorter = &#x27;\n&#x27;.join(half)</span></div>
+<div id="SL800" class="sline"><span class="sln">800</span><span class="sc">            prompt2 = prompt.replace(files_text, shorter)</span></div>
+<div id="SL801" class="sline"><span class="sln">801</span><span class="sc">            result = run_claude(prompt2, timeout=240)</span></div>
+<div id="SL802" class="sline"><span class="sln">802</span><span class="sc">        return batch_idx, result, batch</span></div>
+<div id="SL803" class="sline"><span class="sln">803</span><span class="sc">&nbsp;</span></div>
+<div id="SL804" class="sline"><span class="sln">804</span><span class="sc">    # Pre-allocate result slots by index so we can fill out-of-order (agents</span></div>
+<div id="SL805" class="sline"><span class="sln">805</span><span class="sc">    # finish in unpredictable order due to variable file sizes)</span></div>
+<div id="SL806" class="sline"><span class="sln">806</span><span class="sc">    agent_results = [None] * len(batches)</span></div>
+<div id="SL807" class="sline"><span class="sln">807</span><span class="sc">    with ThreadPoolExecutor(max_workers=AGENT_WORKERS) as pool:</span></div>
+<div id="SL808" class="sline"><span class="sln">808</span><span class="sc">        # Submit all batches; pool runs up to AGENT_WORKERS concurrently</span></div>
+<div id="SL809" class="sline"><span class="sln">809</span><span class="sc">        futures = {</span></div>
+<div id="SL810" class="sline"><span class="sln">810</span><span class="sc">            pool.submit(run_agent, i, b): i</span></div>
+<div id="SL811" class="sline"><span class="sln">811</span><span class="sc">            for i, b in enumerate(batches)</span></div>
+<div id="SL812" class="sline"><span class="sln">812</span><span class="sc">        }</span></div>
+<div id="SL813" class="sline"><span class="sln">813</span><span class="sc">        for future in as_completed(futures):</span></div>
+<div id="SL814" class="sline"><span class="sln">814</span><span class="sc">            idx = futures[future]</span></div>
+<div id="SL815" class="sline"><span class="sln">815</span><span class="sc">            try:</span></div>
+<div id="SL816" class="sline"><span class="sln">816</span><span class="sc">                batch_idx, result, batch = future.result()</span></div>
+<div id="SL817" class="sline"><span class="sln">817</span><span class="sc">                agent_results[batch_idx] = {</span></div>
+<div id="SL818" class="sline"><span class="sln">818</span><span class="sc">                    &#x27;raw&#x27;: result,</span></div>
+<div id="SL819" class="sline"><span class="sln">819</span><span class="sc">                    &#x27;batch&#x27;: batch</span></div>
+<div id="SL820" class="sline"><span class="sln">820</span><span class="sc">                }</span></div>
+<div id="SL821" class="sline"><span class="sln">821</span><span class="sc">                # Parse rankings and show preview</span></div>
+<div id="SL822" class="sline"><span class="sln">822</span><span class="sc">                parsed = _parse_rankings(result, batch)</span></div>
+<div id="SL823" class="sline"><span class="sln">823</span><span class="sc">                agent_results[batch_idx][&#x27;parsed&#x27;] = parsed</span></div>
+<div id="SL824" class="sline"><span class="sln">824</span><span class="sc">                top3 = [f&#x27;{r[&quot;filename&quot;]}({r[&quot;score&quot;]})&#x27; for r in parsed[:3]]</span></div>
+<div id="SL825" class="sline"><span class="sln">825</span><span class="sc">                tprint(f&#x27;Agent {batch_idx+1}/{len(batches)} done — top: {&quot;, &quot;.join(top3)}&#x27;)</span></div>
+<div id="SL826" class="sline"><span class="sln">826</span><span class="sc">            except Exception as e:</span></div>
+<div id="SL827" class="sline"><span class="sln">827</span><span class="sc">                tprint(f&#x27;Agent {idx+1} failed: {e}&#x27;)</span></div>
+<div id="SL828" class="sline"><span class="sln">828</span><span class="sc">                agent_results[idx] = {</span></div>
+<div id="SL829" class="sline"><span class="sln">829</span><span class="sc">                    &#x27;raw&#x27;: f&#x27;[error: {e}]&#x27;,</span></div>
+<div id="SL830" class="sline"><span class="sln">830</span><span class="sc">                    &#x27;batch&#x27;: batches[idx],</span></div>
+<div id="SL831" class="sline"><span class="sln">831</span><span class="sc">                    &#x27;parsed&#x27;: []</span></div>
+<div id="SL832" class="sline"><span class="sln">832</span><span class="sc">                }</span></div>
+<div id="SL833" class="sline"><span class="sln">833</span><span class="sc">&nbsp;</span></div>
+<div id="SL834" class="sline"><span class="sln">834</span><span class="sc">    done = sum(1 for r in agent_results if r and r.get(&#x27;parsed&#x27;))</span></div>
+<div id="SL835" class="sline"><span class="sln">835</span><span class="sc">    tprint(f&#x27;{done}/{len(batches)} agents succeeded in {time.time()-t0:.1f}s&#x27;)</span></div>
+<div id="SL836" class="sline"><span class="sln">836</span><span class="sc">    return [r for r in agent_results if r is not None]</span></div>
+<div id="SL837" class="sline"><span class="sln">837</span><span class="sc">&nbsp;</span></div>
+<div id="SL838" class="sline"><span class="sln">838</span><span class="sc">&nbsp;</span></div>
+<div id="SL839" class="sline"><span class="sln">839</span><span class="sc">def _parse_rankings(raw, batch):</span></div>
+<div id="SL840" class="sline"><span class="sln">840</span><span class="sc">    &quot;&quot;&quot;Extract the agent&#x27;s JSON rankings from its raw stdout.</span></div>
+<div id="SL841" class="sline"><span class="sln">841</span><span class="sc">    The prompt demands strict JSON format, but LLMs sometimes add prose before/after.</span></div>
+<div id="SL842" class="sline"><span class="sln">842</span><span class="sc">    Strategy: grab first {...} block, parse, map file indices back to original batch.</span></div>
+<div id="SL843" class="sline"><span class="sln">843</span><span class="sc">    Returns: list of dicts sorted by score desc, or [] on parse failure.</span></div>
+<div id="SL844" class="sline"><span class="sln">844</span><span class="sc">    &quot;&quot;&quot;</span></div>
+<div id="SL845" class="sline"><span class="sln">845</span><span class="sc">    match = re.search(r&#x27;\{.*\}&#x27;, raw, re.DOTALL)</span></div>
+<div id="SL846" class="sline"><span class="sln">846</span><span class="sc">    if not match:</span></div>
+<div id="SL847" class="sline"><span class="sln">847</span><span class="sc">        return []</span></div>
+<div id="SL848" class="sline"><span class="sln">848</span><span class="sc">    try:</span></div>
+<div id="SL849" class="sline"><span class="sln">849</span><span class="sc">        data = json.loads(match.group())</span></div>
+<div id="SL850" class="sline"><span class="sln">850</span><span class="sc">        rankings = data.get(&#x27;rankings&#x27;, [])</span></div>
+<div id="SL851" class="sline"><span class="sln">851</span><span class="sc">    except json.JSONDecodeError:</span></div>
+<div id="SL852" class="sline"><span class="sln">852</span><span class="sc">        return []</span></div>
+<div id="SL853" class="sline"><span class="sln">853</span><span class="sc">&nbsp;</span></div>
+<div id="SL854" class="sline"><span class="sln">854</span><span class="sc">    # Agent uses 1-based file numbering in its output (matches the FILE 1/2/3 labels)</span></div>
+<div id="SL855" class="sline"><span class="sln">855</span><span class="sc">    results = []</span></div>
+<div id="SL856" class="sline"><span class="sln">856</span><span class="sc">    for r in rankings:</span></div>
+<div id="SL857" class="sline"><span class="sln">857</span><span class="sc">        file_idx = r.get(&#x27;file&#x27;, 0) - 1     # Convert to 0-based Python index</span></div>
+<div id="SL858" class="sline"><span class="sln">858</span><span class="sc">        if 0 &lt;= file_idx &lt; len(batch):       # Bounds check (agent might hallucinate indices)</span></div>
+<div id="SL859" class="sline"><span class="sln">859</span><span class="sc">            results.append({</span></div>
+<div id="SL860" class="sline"><span class="sln">860</span><span class="sc">                &#x27;filename&#x27;: batch[file_idx][&#x27;filename&#x27;],</span></div>
+<div id="SL861" class="sline"><span class="sln">861</span><span class="sc">                &#x27;path&#x27;: batch[file_idx][&#x27;path&#x27;],</span></div>
+<div id="SL862" class="sline"><span class="sln">862</span><span class="sc">                &#x27;text&#x27;: batch[file_idx][&#x27;text&#x27;],       # Needed by Step 6 for final answer</span></div>
+<div id="SL863" class="sline"><span class="sln">863</span><span class="sc">                &#x27;score&#x27;: r.get(&#x27;score&#x27;, 0),            # Agent&#x27;s 0-10 relevance score</span></div>
+<div id="SL864" class="sline"><span class="sln">864</span><span class="sc">                &#x27;reason&#x27;: r.get(&#x27;reason&#x27;, &#x27;&#x27;),         # Agent&#x27;s one-line justification</span></div>
+<div id="SL865" class="sline"><span class="sln">865</span><span class="sc">                &#x27;vector_score&#x27;: batch[file_idx][&#x27;score&#x27;]  # Original Step 2 vector similarity</span></div>
+<div id="SL866" class="sline"><span class="sln">866</span><span class="sc">            })</span></div>
+<div id="SL867" class="sline"><span class="sln">867</span><span class="sc">    # Sort this batch&#x27;s results by agent score (Step 5 will merge across batches)</span></div>
+<div id="SL868" class="sline"><span class="sln">868</span><span class="sc">    results.sort(key=lambda x: -x[&#x27;score&#x27;])</span></div>
+<div id="SL869" class="sline"><span class="sln">869</span><span class="sc">    return results</span></div>
+<div id="SL870" class="sline"><span class="sln">870</span><span class="sc">&nbsp;</span></div>
+<div id="SL871" class="sline"><span class="sln">871</span><span class="sc">&nbsp;</span></div>
+<div id="SL872" class="sline"><span class="sln">872</span><span class="sc"># ── Step 5: Merge rankings ────────────────────────────────────────</span></div>
+<div id="SL873" class="sline"><span class="sln">873</span><span class="sc"># INPUT:  list of agent_results (one per batch)</span></div>
+<div id="SL874" class="sline"><span class="sln">874</span><span class="sc"># OUTPUT: top 15 files by agent score (with stem dedup)</span></div>
+<div id="SL875" class="sline"><span class="sln">875</span><span class="sc"># METHOD: flatten all agent rankings → dedup by path → dedup by stem → sort → top 15</span></div>
+<div id="SL876" class="sline"><span class="sln">876</span><span class="sc"># WHY:    Different agents can independently rank the same file if retrieval</span></div>
+<div id="SL877" class="sline"><span class="sln">877</span><span class="sc">#         produces near-duplicates. Also email threads in different folders.</span></div>
+<div id="SL878" class="sline"><span class="sln">878</span><span class="sc">TOP_FILES_FOR_ANSWER = 15       # How many files Step 6 feeds to final answer Claude</span></div>
+<div id="SL879" class="sline"><span class="sln">879</span><span class="sc">&nbsp;</span></div>
+<div id="SL880" class="sline"><span class="sln">880</span><span class="sc">def step_merge(agent_results):</span></div>
+<div id="SL881" class="sline"><span class="sln">881</span><span class="sc">    print(f&#x27;\n=== STEP 5: Merge rankings from all agents ===&#x27;, flush=True)</span></div>
+<div id="SL882" class="sline"><span class="sln">882</span><span class="sc">    t0 = time.time()</span></div>
+<div id="SL883" class="sline"><span class="sln">883</span><span class="sc">&nbsp;</span></div>
+<div id="SL884" class="sline"><span class="sln">884</span><span class="sc">    # Flatten: collect every ranked entry across all agent batches</span></div>
+<div id="SL885" class="sline"><span class="sln">885</span><span class="sc">    all_ranked = []</span></div>
+<div id="SL886" class="sline"><span class="sln">886</span><span class="sc">    for ar in agent_results:</span></div>
+<div id="SL887" class="sline"><span class="sln">887</span><span class="sc">        for r in ar.get(&#x27;parsed&#x27;, []):</span></div>
+<div id="SL888" class="sline"><span class="sln">888</span><span class="sc">            all_ranked.append(r)</span></div>
+<div id="SL889" class="sline"><span class="sln">889</span><span class="sc">&nbsp;</span></div>
+<div id="SL890" class="sline"><span class="sln">890</span><span class="sc">    # Dedup pass 1: by exact path (same file ranked by &gt;1 agent → keep best score)</span></div>
+<div id="SL891" class="sline"><span class="sln">891</span><span class="sc">    by_path = {}</span></div>
+<div id="SL892" class="sline"><span class="sln">892</span><span class="sc">    for r in all_ranked:</span></div>
+<div id="SL893" class="sline"><span class="sln">893</span><span class="sc">        p = r[&#x27;path&#x27;]</span></div>
+<div id="SL894" class="sline"><span class="sln">894</span><span class="sc">        if p not in by_path or r[&#x27;score&#x27;] &gt; by_path[p][&#x27;score&#x27;]:</span></div>
+<div id="SL895" class="sline"><span class="sln">895</span><span class="sc">            by_path[p] = r</span></div>
+<div id="SL896" class="sline"><span class="sln">896</span><span class="sc">&nbsp;</span></div>
+<div id="SL897" class="sline"><span class="sln">897</span><span class="sc">    # Dedup pass 2: by filename stem (see _file_stem — collapses email threads,</span></div>
+<div id="SL898" class="sline"><span class="sln">898</span><span class="sc">    # backup copies, version variants). Uses tie-breaker: longer text wins.</span></div>
+<div id="SL899" class="sline"><span class="sln">899</span><span class="sc">    by_stem = {}</span></div>
+<div id="SL900" class="sline"><span class="sln">900</span><span class="sc">    for r in by_path.values():</span></div>
+<div id="SL901" class="sline"><span class="sln">901</span><span class="sc">        stem = _file_stem(r[&#x27;filename&#x27;])</span></div>
+<div id="SL902" class="sline"><span class="sln">902</span><span class="sc">        if stem not in by_stem or r[&#x27;score&#x27;] &gt; by_stem[stem][&#x27;score&#x27;]:</span></div>
+<div id="SL903" class="sline"><span class="sln">903</span><span class="sc">            by_stem[stem] = r</span></div>
+<div id="SL904" class="sline"><span class="sln">904</span><span class="sc">        elif r[&#x27;score&#x27;] == by_stem[stem][&#x27;score&#x27;]:</span></div>
+<div id="SL905" class="sline"><span class="sln">905</span><span class="sc">            # Tie on score → prefer the one with more text (likely more info)</span></div>
+<div id="SL906" class="sline"><span class="sln">906</span><span class="sc">            if len(r.get(&#x27;text&#x27;, &#x27;&#x27;)) &gt; len(by_stem[stem].get(&#x27;text&#x27;, &#x27;&#x27;)):</span></div>
+<div id="SL907" class="sline"><span class="sln">907</span><span class="sc">                by_stem[stem] = r</span></div>
+<div id="SL908" class="sline"><span class="sln">908</span><span class="sc">&nbsp;</span></div>
+<div id="SL909" class="sline"><span class="sln">909</span><span class="sc">    deduped_count = len(by_path) - len(by_stem)</span></div>
+<div id="SL910" class="sline"><span class="sln">910</span><span class="sc">    # Final sort: highest agent score first (not vector score — agents have semantic understanding)</span></div>
+<div id="SL911" class="sline"><span class="sln">911</span><span class="sc">    merged = sorted(by_stem.values(), key=lambda x: -x[&#x27;score&#x27;])</span></div>
+<div id="SL912" class="sline"><span class="sln">912</span><span class="sc">&nbsp;</span></div>
+<div id="SL913" class="sline"><span class="sln">913</span><span class="sc">    tprint(f&#x27;{len(all_ranked)} rankings from agents → {len(by_path)} unique paths → {len(by_stem)} after stem dedup ({deduped_count} dupes removed)&#x27;)</span></div>
+<div id="SL914" class="sline"><span class="sln">914</span><span class="sc">&nbsp;</span></div>
+<div id="SL915" class="sline"><span class="sln">915</span><span class="sc">    # Show top files</span></div>
+<div id="SL916" class="sline"><span class="sln">916</span><span class="sc">    for i, r in enumerate(merged[:TOP_FILES_FOR_ANSWER]):</span></div>
+<div id="SL917" class="sline"><span class="sln">917</span><span class="sc">        tprint(f&#x27;  {i+1:2d}. [agent:{r[&quot;score&quot;]:2d} vec:{r[&quot;vector_score&quot;]:.3f}] &#x27;</span></div>
+<div id="SL918" class="sline"><span class="sln">918</span><span class="sc">               f&#x27;{r[&quot;filename&quot;]} — {r[&quot;reason&quot;][:60]}&#x27;)</span></div>
+<div id="SL919" class="sline"><span class="sln">919</span><span class="sc">&nbsp;</span></div>
+<div id="SL920" class="sline"><span class="sln">920</span><span class="sc">    # Count irrelevant files (score &lt;= 2)</span></div>
+<div id="SL921" class="sline"><span class="sln">921</span><span class="sc">    irrelevant = sum(1 for r in merged if r[&#x27;score&#x27;] &lt;= 2)</span></div>
+<div id="SL922" class="sline"><span class="sln">922</span><span class="sc">    tprint(f&#x27;Relevant (score&gt;2): {len(merged)-irrelevant}, irrelevant: {irrelevant}&#x27;)</span></div>
+<div id="SL923" class="sline"><span class="sln">923</span><span class="sc">&nbsp;</span></div>
+<div id="SL924" class="sline"><span class="sln">924</span><span class="sc">    return merged[:TOP_FILES_FOR_ANSWER]</span></div>
+<div id="SL925" class="sline"><span class="sln">925</span><span class="sc">&nbsp;</span></div>
+<div id="SL926" class="sline"><span class="sln">926</span><span class="sc">&nbsp;</span></div>
+<div id="SL927" class="sline"><span class="sln">927</span><span class="sc"># ── Step 6: Final answer from original files ──────────────────────</span></div>
+<div id="SL928" class="sline"><span class="sln">928</span><span class="sc"># INPUT:  query + top 15 files (from Step 5)</span></div>
+<div id="SL929" class="sline"><span class="sln">929</span><span class="sc"># OUTPUT: formatted answer string with [filename] citations + SOURCES list</span></div>
+<div id="SL930" class="sline"><span class="sln">930</span><span class="sc"># METHOD: one big Claude call with all 15 files&#x27; FULL extracted text</span></div>
+<div id="SL931" class="sline"><span class="sln">931</span><span class="sc"># WHY:    Agents in Step 4 only saw their own 10 files. Step 6 Claude sees the</span></div>
+<div id="SL932" class="sline"><span class="sln">932</span><span class="sc">#         top 15 together and can cross-reference, resolve contradictions, and</span></div>
+<div id="SL933" class="sline"><span class="sln">933</span><span class="sc">#         synthesize a coherent answer. Uses 1M context window to fit everything.</span></div>
+<div id="SL934" class="sline"><span class="sln">934</span><span class="sc">def step_final(query, top_files):</span></div>
+<div id="SL935" class="sline"><span class="sln">935</span><span class="sc">    n = len(top_files)</span></div>
+<div id="SL936" class="sline"><span class="sln">936</span><span class="sc">    print(f&#x27;\n=== STEP 6: Final answer (reading {n} original files) ===&#x27;, flush=True)</span></div>
+<div id="SL937" class="sline"><span class="sln">937</span><span class="sc">    t0 = time.time()</span></div>
+<div id="SL938" class="sline"><span class="sln">938</span><span class="sc">    total_chars = sum(len(f[&#x27;text&#x27;]) for f in top_files)</span></div>
+<div id="SL939" class="sline"><span class="sln">939</span><span class="sc">    tprint(f&#x27;Feeding {total_chars:,} chars ({total_chars/1000:.0f}K) of original file text to Claude&#x27;)</span></div>
+<div id="SL940" class="sline"><span class="sln">940</span><span class="sc">&nbsp;</span></div>
+<div id="SL941" class="sline"><span class="sln">941</span><span class="sc">    # Build file block: each file includes the agent&#x27;s relevance score and reason,</span></div>
+<div id="SL942" class="sline"><span class="sln">942</span><span class="sc">    # so the final Claude knows WHY each file was chosen</span></div>
+<div id="SL943" class="sline"><span class="sln">943</span><span class="sc">    file_block = []</span></div>
+<div id="SL944" class="sline"><span class="sln">944</span><span class="sc">    for i, f in enumerate(top_files):</span></div>
+<div id="SL945" class="sline"><span class="sln">945</span><span class="sc">        file_block.append(</span></div>
+<div id="SL946" class="sline"><span class="sln">946</span><span class="sc">            f&#x27;--- FILE {i+1}: {f[&quot;filename&quot;]} (relevance: {f[&quot;score&quot;]}/10) ---\n&#x27;</span></div>
+<div id="SL947" class="sline"><span class="sln">947</span><span class="sc">            f&#x27;Path: {f[&quot;path&quot;]}\n&#x27;</span></div>
+<div id="SL948" class="sline"><span class="sln">948</span><span class="sc">            f&#x27;Why relevant: {f[&quot;reason&quot;]}\n&#x27;</span></div>
+<div id="SL949" class="sline"><span class="sln">949</span><span class="sc">            f&#x27;CONTENT:\n{f[&quot;text&quot;]}\n&#x27;</span></div>
+<div id="SL950" class="sline"><span class="sln">950</span><span class="sc">        )</span></div>
+<div id="SL951" class="sline"><span class="sln">951</span><span class="sc">    files_text = &#x27;\n&#x27;.join(file_block)</span></div>
+<div id="SL952" class="sline"><span class="sln">952</span><span class="sc">&nbsp;</span></div>
+<div id="SL953" class="sline"><span class="sln">953</span><span class="sc">    prompt = (</span></div>
+<div id="SL954" class="sline"><span class="sln">954</span><span class="sc">        f&#x27;You have the {n} most relevant files to answer a question.\n&#x27;</span></div>
+<div id="SL955" class="sline"><span class="sln">955</span><span class="sc">        f&#x27;These files were selected by evaluation agents from a larger set.\n&#x27;</span></div>
+<div id="SL956" class="sline"><span class="sln">956</span><span class="sc">        f&#x27;Read them carefully and answer the question.\n\n&#x27;</span></div>
+<div id="SL957" class="sline"><span class="sln">957</span><span class="sc">        f&#x27;USER QUESTION: {query}\n\n&#x27;</span></div>
+<div id="SL958" class="sline"><span class="sln">958</span><span class="sc">        f&#x27;FILES:\n{files_text}\n\n&#x27;</span></div>
+<div id="SL959" class="sline"><span class="sln">959</span><span class="sc">        f&#x27;INSTRUCTIONS:\n&#x27;</span></div>
+<div id="SL960" class="sline"><span class="sln">960</span><span class="sc">        f&#x27;1. Answer the question using ONLY evidence from these files.\n&#x27;</span></div>
+<div id="SL961" class="sline"><span class="sln">961</span><span class="sc">        f&#x27;2. Quote specific text, dates, names as evidence.\n&#x27;</span></div>
+<div id="SL962" class="sline"><span class="sln">962</span><span class="sc">        f&#x27;3. CITE filenames [filename] inline for every claim.\n&#x27;</span></div>
+<div id="SL963" class="sline"><span class="sln">963</span><span class="sc">        f&#x27;4. If files contradict each other, note both sides with sources.\n&#x27;</span></div>
+<div id="SL964" class="sline"><span class="sln">964</span><span class="sc">        f&#x27;5. Be comprehensive — use all relevant files, not just the top one.\n&#x27;</span></div>
+<div id="SL965" class="sline"><span class="sln">965</span><span class="sc">        f&#x27;6. At the end, list the files you used with a one-line summary each.\n\n&#x27;</span></div>
+<div id="SL966" class="sline"><span class="sln">966</span><span class="sc">        f&#x27;FORMAT:\n&#x27;</span></div>
+<div id="SL967" class="sline"><span class="sln">967</span><span class="sc">        f&#x27;ANSWER:\n[comprehensive answer with inline [filename] citations]\n\n&#x27;</span></div>
+<div id="SL968" class="sline"><span class="sln">968</span><span class="sc">        f&#x27;SOURCES:\n&#x27;</span></div>
+<div id="SL969" class="sline"><span class="sln">969</span><span class="sc">        f&#x27;1. filename — what it contributed\n&#x27;</span></div>
+<div id="SL970" class="sline"><span class="sln">970</span><span class="sc">        f&#x27;2. ...\n&#x27;</span></div>
+<div id="SL971" class="sline"><span class="sln">971</span><span class="sc">    )</span></div>
+<div id="SL972" class="sline"><span class="sln">972</span><span class="sc">&nbsp;</span></div>
+<div id="SL973" class="sline"><span class="sln">973</span><span class="sc">    # 5-minute timeout — this is the most important Claude call, give it time</span></div>
+<div id="SL974" class="sline"><span class="sln">974</span><span class="sc">    result = run_claude(prompt, timeout=300)</span></div>
+<div id="SL975" class="sline"><span class="sln">975</span><span class="sc">    if result == &#x27;[timeout]&#x27;:</span></div>
+<div id="SL976" class="sline"><span class="sln">976</span><span class="sc">        # Retry with top 8 files only (cuts prompt in half, often finishes in time)</span></div>
+<div id="SL977" class="sline"><span class="sln">977</span><span class="sc">        tprint(f&#x27;WARNING: Final answer timed out at 300s — retrying with shorter prompt&#x27;)</span></div>
+<div id="SL978" class="sline"><span class="sln">978</span><span class="sc">        shorter_prompt = prompt.replace(files_text, &#x27;\n&#x27;.join(file_block[:8]))</span></div>
+<div id="SL979" class="sline"><span class="sln">979</span><span class="sc">        result = run_claude(shorter_prompt, timeout=300)</span></div>
+<div id="SL980" class="sline"><span class="sln">980</span><span class="sc">    tprint(f&#x27;Final answer in {time.time()-t0:.1f}s&#x27;)</span></div>
+<div id="SL981" class="sline"><span class="sln">981</span><span class="sc">    return result</span></div>
+<div id="SL982" class="sline"><span class="sln">982</span><span class="sc">&nbsp;</span></div>
+<div id="SL983" class="sline"><span class="sln">983</span><span class="sc">&nbsp;</span></div>
+<div id="SL984" class="sline"><span class="sln">984</span><span class="sc"># ── Main ──────────────────────────────────────────────────────────</span></div>
+<div id="SL985" class="sline"><span class="sln">985</span><span class="sc"># Orchestrator: parses CLI args, runs the 6 steps in order, prints final answer.</span></div>
+<div id="SL986" class="sline"><span class="sln">986</span><span class="sc"># Exit codes: 0 = success, 1 = usage error.</span></div>
+<div id="SL987" class="sline"><span class="sln">987</span><span class="sc">def main():</span></div>
+<div id="SL988" class="sline"><span class="sln">988</span><span class="sc">    # Parse args — accepts &quot;-deep&quot; anywhere, query as first positional, n_results as second</span></div>
+<div id="SL989" class="sline"><span class="sln">989</span><span class="sc">    args = sys.argv[1:]</span></div>
+<div id="SL990" class="sline"><span class="sln">990</span><span class="sc">    deep_mode = False</span></div>
+<div id="SL991" class="sline"><span class="sln">991</span><span class="sc">    if &#x27;-deep&#x27; in args:</span></div>
+<div id="SL992" class="sline"><span class="sln">992</span><span class="sc">        deep_mode = True</span></div>
+<div id="SL993" class="sline"><span class="sln">993</span><span class="sc">        args.remove(&#x27;-deep&#x27;)     # Remove flag so positional args still line up</span></div>
+<div id="SL994" class="sline"><span class="sln">994</span><span class="sc">&nbsp;</span></div>
+<div id="SL995" class="sline"><span class="sln">995</span><span class="sc">    if not args:</span></div>
+<div id="SL996" class="sline"><span class="sln">996</span><span class="sc">        print(&#x27;Usage: dsearch-answer [-deep] &quot;query&quot; [n_results]&#x27;)</span></div>
+<div id="SL997" class="sline"><span class="sln">997</span><span class="sc">        print(&#x27;  -deep  Multi-hop retrieval: read results, extract new terms, search again&#x27;)</span></div>
+<div id="SL998" class="sline"><span class="sln">998</span><span class="sc">        sys.exit(1)</span></div>
+<div id="SL999" class="sline"><span class="sln">999</span><span class="sc">&nbsp;</span></div>
+<div id="SL1000" class="sline"><span class="sln">1000</span><span class="sc">    query = args[0]</span></div>
+<div id="SL1001" class="sline"><span class="sln">1001</span><span class="sc">    n_results = int(args[1]) if len(args) &gt; 1 else MAX_FILES</span></div>
+<div id="SL1002" class="sline"><span class="sln">1002</span><span class="sc">&nbsp;</span></div>
+<div id="SL1003" class="sline"><span class="sln">1003</span><span class="sc">    n_agents = (n_results + BATCH_SIZE - 1) // BATCH_SIZE</span></div>
+<div id="SL1004" class="sline"><span class="sln">1004</span><span class="sc">    mode_str = &#x27;DEEP&#x27; if deep_mode else &#x27;standard&#x27;</span></div>
+<div id="SL1005" class="sline"><span class="sln">1005</span><span class="sc">    print(f&#x27;\n{&quot;=&quot;*56}&#x27;)</span></div>
+<div id="SL1006" class="sline"><span class="sln">1006</span><span class="sc">    print(f&#x27;  dsearch answer: CLexpand -&gt; CLrank -&gt; CLanswer&#x27;)</span></div>
+<div id="SL1007" class="sline"><span class="sln">1007</span><span class="sc">    print(f&#x27;  Mode:   {mode_str}&#x27;)</span></div>
+<div id="SL1008" class="sline"><span class="sln">1008</span><span class="sc">    print(f&#x27;  Query:  {query[:46]}&#x27;)</span></div>
+<div id="SL1009" class="sline"><span class="sln">1009</span><span class="sc">    print(f&#x27;  Files:  {n_results}  |  Agents: {n_agents}  |  Workers: {AGENT_WORKERS}&#x27;)</span></div>
+<div id="SL1010" class="sline"><span class="sln">1010</span><span class="sc">    print(f&#x27;{&quot;=&quot;*56}&#x27;)</span></div>
+<div id="SL1011" class="sline"><span class="sln">1011</span><span class="sc">&nbsp;</span></div>
+<div id="SL1012" class="sline"><span class="sln">1012</span><span class="sc">    t_start = time.time()</span></div>
+<div id="SL1013" class="sline"><span class="sln">1013</span><span class="sc">&nbsp;</span></div>
+<div id="SL1014" class="sline"><span class="sln">1014</span><span class="sc">    # ── Pipeline execution (see module docstring for flow) ──</span></div>
+<div id="SL1015" class="sline"><span class="sln">1015</span><span class="sc">&nbsp;</span></div>
+<div id="SL1016" class="sline"><span class="sln">1016</span><span class="sc">    # Step 1: Claude expands raw query into 5-8 search queries + HyDE</span></div>
+<div id="SL1017" class="sline"><span class="sln">1017</span><span class="sc">    queries = step_understand(query)</span></div>
+<div id="SL1018" class="sline"><span class="sln">1018</span><span class="sc">&nbsp;</span></div>
+<div id="SL1019" class="sline"><span class="sln">1019</span><span class="sc">    # Step 2: Embed queries with Cohere, search ChromaDB, get top N files by path</span></div>
+<div id="SL1020" class="sline"><span class="sln">1020</span><span class="sc">    # Returns full dicts because Step 2b (deep) needs file_embeds for MMR</span></div>
+<div id="SL1021" class="sline"><span class="sln">1021</span><span class="sc">    files, file_scores, file_meta, file_embeds = step_retrieve(queries, n=n_results)</span></div>
+<div id="SL1022" class="sline"><span class="sln">1022</span><span class="sc">    if not files and not file_scores:</span></div>
+<div id="SL1023" class="sline"><span class="sln">1023</span><span class="sc">        print(&#x27;\nNo files found.&#x27;)</span></div>
+<div id="SL1024" class="sline"><span class="sln">1024</span><span class="sc">        sys.exit(0)</span></div>
+<div id="SL1025" class="sline"><span class="sln">1025</span><span class="sc">&nbsp;</span></div>
+<div id="SL1026" class="sline"><span class="sln">1026</span><span class="sc">    # Step 2b: OPTIONAL — multi-hop retrieval (only with -deep flag)</span></div>
+<div id="SL1027" class="sline"><span class="sln">1027</span><span class="sc">    # Reads diverse results, asks Claude for new terms, searches again (up to 3 loops)</span></div>
+<div id="SL1028" class="sline"><span class="sln">1028</span><span class="sc">    if deep_mode:</span></div>
+<div id="SL1029" class="sline"><span class="sln">1029</span><span class="sc">        files = step_deep_retrieve(query, file_scores, file_meta, file_embeds)</span></div>
+<div id="SL1030" class="sline"><span class="sln">1030</span><span class="sc">&nbsp;</span></div>
+<div id="SL1031" class="sline"><span class="sln">1031</span><span class="sc">    if not files:</span></div>
+<div id="SL1032" class="sline"><span class="sln">1032</span><span class="sc">        print(&#x27;\nNo files found.&#x27;)</span></div>
+<div id="SL1033" class="sline"><span class="sln">1033</span><span class="sc">        sys.exit(0)</span></div>
+<div id="SL1034" class="sline"><span class="sln">1034</span><span class="sc">&nbsp;</span></div>
+<div id="SL1035" class="sline"><span class="sln">1035</span><span class="sc">    # Step 3: Extract plain text from each file (format-specific dispatch)</span></div>
+<div id="SL1036" class="sline"><span class="sln">1036</span><span class="sc">    extracted = step_extract(files)</span></div>
+<div id="SL1037" class="sline"><span class="sln">1037</span><span class="sc">&nbsp;</span></div>
+<div id="SL1038" class="sline"><span class="sln">1038</span><span class="sc">    # Step 4: Spawn 10 parallel Claude agents — each ranks 10 files 0-10 with reasons</span></div>
+<div id="SL1039" class="sline"><span class="sln">1039</span><span class="sc">    agent_results = step_agents(query, extracted)</span></div>
+<div id="SL1040" class="sline"><span class="sln">1040</span><span class="sc">&nbsp;</span></div>
+<div id="SL1041" class="sline"><span class="sln">1041</span><span class="sc">    # Step 5: Merge rankings across all agents, dedup by path+stem, take top 15</span></div>
+<div id="SL1042" class="sline"><span class="sln">1042</span><span class="sc">    top_files = step_merge(agent_results)</span></div>
+<div id="SL1043" class="sline"><span class="sln">1043</span><span class="sc">    if not top_files:</span></div>
+<div id="SL1044" class="sline"><span class="sln">1044</span><span class="sc">        print(&#x27;\nNo relevant files found by agents.&#x27;)</span></div>
+<div id="SL1045" class="sline"><span class="sln">1045</span><span class="sc">        sys.exit(0)</span></div>
+<div id="SL1046" class="sline"><span class="sln">1046</span><span class="sc">&nbsp;</span></div>
+<div id="SL1047" class="sline"><span class="sln">1047</span><span class="sc">    # Step 6: Final Claude reads top 15 originals → comprehensive answer with citations</span></div>
+<div id="SL1048" class="sline"><span class="sln">1048</span><span class="sc">    answer = step_final(query, top_files)</span></div>
+<div id="SL1049" class="sline"><span class="sln">1049</span><span class="sc">&nbsp;</span></div>
+<div id="SL1050" class="sline"><span class="sln">1050</span><span class="sc">    # Print result</span></div>
+<div id="SL1051" class="sline"><span class="sln">1051</span><span class="sc">    total = time.time() - t_start</span></div>
+<div id="SL1052" class="sline"><span class="sln">1052</span><span class="sc">    print(f&#x27;\n{&quot;=&quot;*56}&#x27;)</span></div>
+<div id="SL1053" class="sline"><span class="sln">1053</span><span class="sc">    print(answer)</span></div>
+<div id="SL1054" class="sline"><span class="sln">1054</span><span class="sc">    print(f&#x27;\n{&quot;=&quot;*56}&#x27;)</span></div>
+<div id="SL1055" class="sline"><span class="sln">1055</span><span class="sc">    deep_str = &#x27; (deep)&#x27; if deep_mode else &#x27;&#x27;</span></div>
+<div id="SL1056" class="sline"><span class="sln">1056</span><span class="sc">    print(f&#x27;Total: {total:.1f}s{deep_str}  |  {len(queries)} queries -&gt; {len(files)} files &#x27;</span></div>
+<div id="SL1057" class="sline"><span class="sln">1057</span><span class="sc">          f&#x27;-&gt; {len(agent_results)} agents ranked -&gt; top {len(top_files)} -&gt; answer&#x27;)</span></div>
+<div id="SL1058" class="sline"><span class="sln">1058</span><span class="sc">&nbsp;</span></div>
+<div id="SL1059" class="sline"><span class="sln">1059</span><span class="sc">&nbsp;</span></div>
+<div id="SL1060" class="sline"><span class="sln">1060</span><span class="sc">if __name__ == &#x27;__main__&#x27;:</span></div>
+<div id="SL1061" class="sline"><span class="sln">1061</span><span class="sc">    main()</span></div>
+  </div>
+</div>
+
+<div class="hero"><div class="hero-inner">
+  <h1>dsearch-<span>answer</span></h1>
+  <div class="tagline">6-step AI answer pipeline · semantic-disk-search/scripts/dsearch-answer</div>
+  <div class="chips">
+    <span class="chip"><b>1061</b> lines</span>
+    <span class="chip"><b>6</b> pipeline steps</span>
+    <span class="chip">fan-out · loop · decision branches</span>
+    <span class="chip">python · Cohere · ChromaDB · Claude</span>
+  </div>
+</div></div>
+
+<div class="main">
+  <div class="diagram-box">
+    <svg viewBox="0 0 1400 1780" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8" fill="#89b4fa"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="8" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8" fill="#f38ba8"/>
+    </marker>
+    <style><![CDATA[
+      .bg { fill:#1e1e2e; }
+      rect.box { fill:#313244; stroke:#89b4fa; stroke-width:1.5; }
+      rect.note { fill:#181825; stroke:#45475a; stroke-width:1; stroke-dasharray:3 3; }
+      polygon.diamond { fill:#313244; stroke:#f9e2af; stroke-width:1.5; }
+      rect.term { fill:#313244; stroke:#a6e3a1; stroke-width:1.8; }
+      rect.group { fill:none; stroke:#45475a; stroke-width:1; stroke-dasharray:5 4; }
+      path.arr, line.arr { stroke:#89b4fa; stroke-width:1.5; fill:none; marker-end:url(#arrow); }
+      path.arr-red, line.arr-red { stroke:#f38ba8; stroke-width:1.5; fill:none; marker-end:url(#arrow-red); }
+      text { font-family:'DM Sans',system-ui,sans-serif; font-size:13px; fill:#cdd6f4; text-anchor:middle; dominant-baseline:middle; }
+      text.title { fill:#89b4fa; font-size:22px; font-weight:bold; }
+      text.subtitle { fill:#6c7086; font-size:11px; }
+      text.sub { fill:#cba6f7; font-size:14px; font-weight:bold; }
+      text.mono { font-family:'JetBrains Mono','Menlo',monospace; font-size:10px; fill:#94e2d5; }
+      text.note { font-family:'JetBrains Mono','Menlo',monospace; font-size:11px; fill:#a6adc8; }
+      text.label { font-size:11px; fill:#f9e2af; }
+      a { cursor:pointer; }
+      a:hover rect.box { stroke:#f38ba8; stroke-width:2.5; fill:#45475a; }
+      a:hover polygon.diamond { stroke:#f38ba8; stroke-width:2.5; fill:#45475a; }
+    ]]></style>
+  </defs>
+
+  <rect class="bg" width="100%" height="100%"/>
+
+  <!-- Title -->
+  <text x="700" y="30" class="title">dsearch-answer — pipeline flow</text>
+  <text x="700" y="52" class="subtitle">semantic-disk-search/scripts/dsearch-answer  ·  click any node to jump to source</text>
+
+  <!-- ═══════════ HEADER / SETUP ═══════════ -->
+
+  <!-- Start terminal -->
+  <rect class="term" x="610" y="80" width="180" height="38" rx="19" ry="19"/>
+  <text x="700" y="104">dsearch-answer invoked</text>
+
+  <!-- Module docstring L1-60 (note, non-linked) -->
+  <a onclick="showLines(1,60);return false" href="#code-panel">
+    <rect class="box" x="545" y="140" width="310" height="48" rx="8"/>
+    <text x="700" y="161">Module docstring &amp; imports</text>
+    <text x="700" y="178" class="mono">L1-60 · pipeline overview, resources</text>
+  </a>
+
+  <!-- Config L62-80 -->
+  <a onclick="showLines(62,80);return false" href="#code-panel">
+    <rect class="box" x="545" y="210" width="310" height="48" rx="8"/>
+    <text x="700" y="231">Config constants</text>
+    <text x="700" y="248" class="mono">L62-80 · MAX_FILES=100, BATCH_SIZE=10</text>
+  </a>
+
+  <!-- Load env L82-90 -->
+  <a onclick="showLines(82,90);return false" href="#code-panel">
+    <rect class="box" x="545" y="280" width="310" height="48" rx="8"/>
+    <text x="700" y="301">Load ~/.config/dsearch/.env</text>
+    <text x="700" y="318" class="mono">L82-90 · COHERE_API_KEY</text>
+  </a>
+
+  <!-- Parse args L987-1020 -->
+  <a onclick="showLines(987,1020);return false" href="#code-panel">
+    <rect class="box" x="545" y="350" width="310" height="48" rx="8"/>
+    <text x="700" y="371">main() — parse args</text>
+    <text x="700" y="388" class="mono">L987-1020 · query, n_results, -deep?</text>
+  </a>
+
+  <!-- ═══════════ STEP 1 ═══════════ -->
+
+  <a onclick="showLines(263,404);return false" href="#code-panel">
+    <rect class="box" x="500" y="440" width="400" height="72" rx="8" stroke="#cba6f7"/>
+    <text x="700" y="463" fill="#cba6f7" font-weight="700">Step 1 — Query Understanding</text>
+    <text x="700" y="484" class="mono">step_understand(query) · Claude call</text>
+    <text x="700" y="500" class="mono">L263-404 · returns [core, variants, subjects, HyDE]</text>
+  </a>
+
+  <!-- Pre-search peek (side note) -->
+  <a onclick="showLines(275,300);return false" href="#code-panel">
+    <rect class="note" x="140" y="440" width="280" height="72" rx="6"/>
+    <text x="280" y="463" class="note">① pre-search: quick 10-file peek</text>
+    <text x="280" y="482" class="note">feeds domain vocab to Claude</text>
+    <text x="280" y="500" class="mono">L275-300</text>
+  </a>
+  <path class="arr" d="M500,480 L425,480" stroke-dasharray="4 3"/>
+  <text x="462" y="473" class="label">uses</text>
+
+  <!-- JSON repair (side note) -->
+  <a onclick="showLines(335,365);return false" href="#code-panel">
+    <rect class="note" x="980" y="440" width="280" height="72" rx="6"/>
+    <text x="1120" y="463" class="note">② repair_json fallback</text>
+    <text x="1120" y="482" class="note">handles malformed LLM output</text>
+    <text x="1120" y="500" class="mono">L335-365</text>
+  </a>
+  <path class="arr" d="M900,480 L978,480" stroke-dasharray="4 3"/>
+  <text x="936" y="473" class="label">fallback</text>
+
+  <!-- ═══════════ STEP 2 ═══════════ -->
+
+  <a onclick="showLines(414,479);return false" href="#code-panel">
+    <rect class="box" x="500" y="540" width="400" height="72" rx="8" stroke="#a6e3a1"/>
+    <text x="700" y="563" fill="#a6e3a1" font-weight="700">Step 2 — Hybrid Retrieval</text>
+    <text x="700" y="584" class="mono">step_retrieve(queries) · Cohere + ChromaDB</text>
+    <text x="700" y="600" class="mono">L414-479 · 5-8 queries → top 100 files</text>
+  </a>
+
+  <!-- Stem dedup note -->
+  <a onclick="showLines(453,469);return false" href="#code-panel">
+    <rect class="note" x="980" y="540" width="280" height="72" rx="6"/>
+    <text x="1120" y="563" class="note">_file_stem dedup</text>
+    <text x="1120" y="582" class="note">collapse RE__/FW__, BACK, v2</text>
+    <text x="1120" y="600" class="mono">L113-136, used at L453</text>
+  </a>
+  <path class="arr" d="M900,580 L978,580" stroke-dasharray="4 3"/>
+
+  <!-- ═══════════ DEEP MODE DIAMOND ═══════════ -->
+
+  <a onclick="showLines(1038,1042);return false" href="#code-panel">
+    <polygon class="diamond" points="700,644 840,686 700,728 560,686"/>
+    <text x="700" y="682">deep_mode?</text>
+    <text x="700" y="700" class="mono">L1038-1042</text>
+  </a>
+
+  <!-- ═══════════ STEP 2b DEEP LOOP (right branch) ═══════════ -->
+
+  <rect class="group" x="920" y="640" width="420" height="280" rx="10"/>
+  <text x="1130" y="662" class="sub">-deep: multi-hop loop (max 3)</text>
+
+  <a onclick="showLines(589,675);return false" href="#code-panel">
+    <rect class="box" x="950" y="685" width="360" height="52" rx="8" stroke="#f38ba8"/>
+    <text x="1130" y="706" fill="#f38ba8" font-weight="700">Step 2b — deep_retrieve</text>
+    <text x="1130" y="724" class="mono">L589-675 · loop ×3</text>
+  </a>
+
+  <a onclick="showLines(518,576);return false" href="#code-panel">
+    <rect class="box" x="950" y="755" width="360" height="52" rx="8"/>
+    <text x="1130" y="776">_mmr_select (diversity, λ=0.7)</text>
+    <text x="1130" y="793" class="mono">L518-576 · MMR — Carbonell 1998</text>
+  </a>
+
+  <a onclick="showLines(620,660);return false" href="#code-panel">
+    <rect class="box" x="950" y="825" width="360" height="52" rx="8"/>
+    <text x="1130" y="846">Claude → extract new search terms</text>
+    <text x="1130" y="863" class="mono">L620-660</text>
+  </a>
+
+  <a onclick="showLines(481,506);return false" href="#code-panel">
+    <rect class="box" x="950" y="895" width="360" height="22" rx="8"/>
+    <text x="1130" y="908" class="mono">_search_chromadb merge · L481-506</text>
+  </a>
+
+  <!-- Loop arrows inside 2b -->
+  <line class="arr-red" x1="1130" y1="737" x2="1130" y2="755"/>
+  <line class="arr-red" x1="1130" y1="807" x2="1130" y2="825"/>
+  <line class="arr-red" x1="1130" y1="877" x2="1130" y2="895"/>
+  <path class="arr-red" d="M950,906 Q900,906 900,770 Q900,710 950,710"/>
+  <text x="880" y="808" class="label">loop</text>
+
+  <!-- Diamond → 2b arrow -->
+  <path class="arr-red" d="M840,686 L950,686"/>
+  <text x="895" y="678" class="label">-deep</text>
+
+  <!-- ═══════════ STEP 3 (after merge) ═══════════ -->
+
+  <a onclick="showLines(683,713);return false" href="#code-panel">
+    <rect class="box" x="500" y="970" width="400" height="72" rx="8" stroke="#f9e2af"/>
+    <text x="700" y="993" fill="#f9e2af" font-weight="700">Step 3 — Extract Text</text>
+    <text x="700" y="1014" class="mono">step_extract(files)</text>
+    <text x="700" y="1030" class="mono">L683-713 · dispatches extract_text() per file</text>
+  </a>
+
+  <!-- extract_text multi-format note -->
+  <a onclick="showLines(138,255);return false" href="#code-panel">
+    <rect class="note" x="140" y="970" width="280" height="72" rx="6"/>
+    <text x="280" y="990" class="note">extract_text() — 10 formats</text>
+    <text x="280" y="1008" class="note">pdftotext, antiword, zipfile,</text>
+    <text x="280" y="1023" class="note">openpyxl, OCR sidecar, HTML</text>
+    <text x="280" y="1038" class="mono">L138-255</text>
+  </a>
+  <path class="arr" d="M500,1006 L425,1006" stroke-dasharray="4 3"/>
+  <text x="462" y="999" class="label">uses</text>
+
+  <!-- Arrows from diamond to Step 3 -->
+  <path class="arr" d="M560,686 L440,686 L440,1006 L500,1006"/>
+  <text x="410" y="680" class="label">no (standard)</text>
+  <path class="arr" d="M1130,917 L1130,1006 L900,1006"/>
+  <text x="1200" y="970" class="label">deep done</text>
+
+  <!-- ═══════════ STEP 4 (parallel fan-out) ═══════════ -->
+
+  <a onclick="showLines(723,837);return false" href="#code-panel">
+    <rect class="box" x="500" y="1080" width="400" height="72" rx="8" stroke="#fab387"/>
+    <text x="700" y="1103" fill="#fab387" font-weight="700">Step 4 — 10 Parallel Agents</text>
+    <text x="700" y="1124" class="mono">step_agents(query, extracted)</text>
+    <text x="700" y="1140" class="mono">L723-837 · ThreadPoolExecutor(6 workers)</text>
+  </a>
+
+  <!-- Fan out to 3 example agents (visually suggesting 10) -->
+  <a onclick="showLines(745,830);return false" href="#code-panel">
+    <rect class="box" x="170" y="1200" width="200" height="46" rx="6"/>
+    <text x="270" y="1218">Agent 1 (files 1-10)</text>
+    <text x="270" y="1235" class="mono">run_claude() · score 0-10</text>
+  </a>
+  <a onclick="showLines(745,830);return false" href="#code-panel">
+    <rect class="box" x="600" y="1200" width="200" height="46" rx="6"/>
+    <text x="700" y="1218">Agent 2 (files 11-20)</text>
+    <text x="700" y="1235" class="mono">run_claude() · score 0-10</text>
+  </a>
+  <a onclick="showLines(745,830);return false" href="#code-panel">
+    <rect class="box" x="1030" y="1200" width="200" height="46" rx="6"/>
+    <text x="1130" y="1218">Agent N (… up to 10)</text>
+    <text x="1130" y="1235" class="mono">run_claude() · score 0-10</text>
+  </a>
+
+  <!-- Fan-out arrows -->
+  <path class="arr" d="M600,1152 L270,1152 L270,1200"/>
+  <line class="arr" x1="700" y1="1152" x2="700" y2="1200"/>
+  <path class="arr" d="M800,1152 L1130,1152 L1130,1200"/>
+
+  <!-- Timeout retry diamond -->
+  <a onclick="showLines(820,828);return false" href="#code-panel">
+    <polygon class="diamond" points="700,1280 830,1316 700,1352 570,1316"/>
+    <text x="700" y="1312">timeout?</text>
+    <text x="700" y="1330" class="mono">L820-828</text>
+  </a>
+  <line class="arr" x1="270" y1="1246" x2="270" y2="1310"/>
+  <path class="arr" d="M270,1310 L570,1316"/>
+  <line class="arr" x1="700" y1="1246" x2="700" y2="1280"/>
+  <path class="arr" d="M1130,1246 L1130,1316 L830,1316"/>
+
+  <!-- Retry with half -->
+  <a onclick="showLines(823,828);return false" href="#code-panel">
+    <rect class="note" x="870" y="1390" width="240" height="46" rx="6"/>
+    <text x="990" y="1410" class="note">retry with half files</text>
+    <text x="990" y="1427" class="mono">L823-828</text>
+  </a>
+  <path class="arr" d="M770,1340 L990,1390"/>
+  <text x="900" y="1370" class="label">yes</text>
+
+  <!-- _parse_rankings helper note -->
+  <a onclick="showLines(839,870);return false" href="#code-panel">
+    <rect class="note" x="140" y="1280" width="280" height="60" rx="6"/>
+    <text x="280" y="1300" class="note">_parse_rankings</text>
+    <text x="280" y="1318" class="note">extracts JSON from agent stdout</text>
+    <text x="280" y="1333" class="mono">L839-870</text>
+  </a>
+  <path class="arr" d="M570,1316 L425,1316" stroke-dasharray="4 3"/>
+  <text x="497" y="1310" class="label">uses</text>
+
+  <!-- ═══════════ STEP 5 ═══════════ -->
+
+  <a onclick="showLines(880,925);return false" href="#code-panel">
+    <rect class="box" x="500" y="1400" width="400" height="72" rx="8" stroke="#94e2d5"/>
+    <text x="700" y="1423" fill="#94e2d5" font-weight="700">Step 5 — Merge Rankings</text>
+    <text x="700" y="1444" class="mono">step_merge(agent_results) · top 15</text>
+    <text x="700" y="1460" class="mono">L880-925 · dedup by path + stem</text>
+  </a>
+  <line class="arr" x1="700" y1="1352" x2="700" y2="1400"/>
+  <text x="718" y="1380" class="label">no</text>
+
+  <!-- ═══════════ STEP 6 ═══════════ -->
+
+  <a onclick="showLines(934,982);return false" href="#code-panel">
+    <rect class="box" x="500" y="1500" width="400" height="72" rx="8" stroke="#74c7ec"/>
+    <text x="700" y="1523" fill="#74c7ec" font-weight="700">Step 6 — Final Answer</text>
+    <text x="700" y="1544" class="mono">step_final(query, top_files)</text>
+    <text x="700" y="1560" class="mono">L934-982 · Claude reads 15 originals, cites</text>
+  </a>
+  <line class="arr" x1="700" y1="1472" x2="700" y2="1500"/>
+
+  <!-- Arrow 4→5 -->
+  <line class="arr" x1="700" y1="1432" x2="700" y2="1400"/>
+
+  <!-- ═══════════ END ═══════════ -->
+
+  <a onclick="showLines(1045,1061);return false" href="#code-panel">
+    <rect class="box" x="540" y="1600" width="320" height="48" rx="8"/>
+    <text x="700" y="1620">Print ANSWER + SOURCES</text>
+    <text x="700" y="1637" class="mono">L1045-1061</text>
+  </a>
+  <line class="arr" x1="700" y1="1572" x2="700" y2="1600"/>
+
+  <rect class="term" x="610" y="1680" width="180" height="38" rx="19"/>
+  <text x="700" y="1704">done</text>
+  <line class="arr" x1="700" y1="1648" x2="700" y2="1680"/>
+
+  <!-- Main arrows (vertical spine) -->
+  <line class="arr" x1="700" y1="118" x2="700" y2="140"/>
+  <line class="arr" x1="700" y1="188" x2="700" y2="210"/>
+  <line class="arr" x1="700" y1="258" x2="700" y2="280"/>
+  <line class="arr" x1="700" y1="328" x2="700" y2="350"/>
+  <line class="arr" x1="700" y1="398" x2="700" y2="440"/>
+  <line class="arr" x1="700" y1="512" x2="700" y2="540"/>
+  <line class="arr" x1="700" y1="612" x2="700" y2="644"/>
+  <line class="arr" x1="700" y1="1042" x2="700" y2="1080"/>
+  <line class="arr" x1="700" y1="1152" x2="700" y2="1152"/>
+
+  <!-- Legend -->
+  <g transform="translate(40, 1730)">
+    <rect class="box" x="0" y="0" width="22" height="14" rx="3"/>
+    <text x="58" y="11" text-anchor="start" font-size="11" fill="#a6adc8">step (click → source)</text>
+    <polygon class="diamond" points="180,7 195,0 210,7 195,14"/>
+    <text x="222" y="11" text-anchor="start" font-size="11" fill="#a6adc8">decision</text>
+    <rect class="term" x="300" y="0" width="22" height="14" rx="7"/>
+    <text x="332" y="11" text-anchor="start" font-size="11" fill="#a6adc8">start/end</text>
+    <rect class="note" x="430" y="0" width="22" height="14" rx="3"/>
+    <text x="462" y="11" text-anchor="start" font-size="11" fill="#a6adc8">helper/note</text>
+  </g>
+</svg>
+  </div>
+  <div class="hint">Click any node → source slides in on the right · <kbd>Esc</kbd> to close</div>
+</div>
+
+<script>
+function showLines(start, end) {
+  document.querySelectorAll('.sline.hl, .sline.target').forEach(el => el.classList.remove('hl','target'));
+  const lo = Math.min(start, end), hi = Math.max(start, end);
+  for (let i = lo; i <= hi; i++) {
+    const el = document.getElementById('SL' + i);
+    if (el) el.classList.add('hl');
+  }
+  const first = document.getElementById('SL' + lo);
+  if (first) {
+    first.classList.add('target');
+    const body = document.getElementById('code-panel-body');
+    body.scrollTop = first.offsetTop - body.clientHeight / 3;
+  }
+  document.getElementById('code-panel-title').textContent =
+    'dsearch-answer — line' + (lo === hi ? ' ' + lo : 's ' + lo + '–' + hi);
+  document.getElementById('code-panel').classList.add('open');
+  document.body.classList.add('panel-open');
+}
+function closeCodePanel() {
+  document.getElementById('code-panel').classList.remove('open');
+  document.body.classList.remove('panel-open');
+}
+document.getElementById('code-panel-close').onclick = closeCodePanel;
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeCodePanel();
+});
+
+// ── Resizable split: drag the left edge of the code panel to adjust widths ──
+(function setupResizer() {
+  const panel = document.getElementById('code-panel');
+  const resizer = document.getElementById('resizer');
+  const body = document.body;
+  let dragging = false;
+
+  // Load saved width from localStorage (if user resized before)
+  const saved = localStorage.getItem('dsearch-answer.panelWidth');
+  if (saved) {
+    const pct = parseFloat(saved);
+    if (pct > 25 && pct < 85) {
+      panel.style.width = pct + '%';
+      document.documentElement.style.setProperty('--panel-width', pct + '%');
+      // Update body padding when panel is open
+      const style = document.createElement('style');
+      style.textContent = `body.panel-open { padding-right: ${pct + 1}%; }`;
+      document.head.appendChild(style);
+    }
+  }
+
+  resizer.addEventListener('mousedown', e => {
+    e.preventDefault();
+    dragging = true;
+    panel.classList.add('resizing');
+    body.classList.add('resizing');
+    resizer.classList.add('active');
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    // Calculate panel width from mouse X (panel is on the right)
+    const vw = window.innerWidth;
+    const fromRight = vw - e.clientX;
+    const pct = (fromRight / vw) * 100;
+    // Clamp to reasonable range
+    if (pct < 25 || pct > 85) return;
+    panel.style.width = pct + '%';
+    // Update body padding so the diagram area doesn't get covered
+    body.style.paddingRight = (pct + 1) + '%';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    panel.classList.remove('resizing');
+    body.classList.remove('resizing');
+    resizer.classList.remove('active');
+    // Persist to localStorage
+    const pct = parseFloat(panel.style.width);
+    if (!isNaN(pct)) {
+      localStorage.setItem('dsearch-answer.panelWidth', pct.toString());
+    }
+  });
+})();
+
+// Handle #SL{n} URL hash on load (used when linked from docs/index.html)
+(function handleInitialHash() {
+  const hash = window.location.hash;
+  const m = hash.match(/^#SL(\d+)$/);
+  if (!m) return;
+  const targetLine = parseInt(m[1], 10);
+  const ranges = [
+    [1,60], [62,80], [82,90], [113,136], [138,255],
+    [263,404], [275,300], [335,365],
+    [414,479], [453,469], [481,506], [518,576],
+    [589,675], [620,660],
+    [683,713],
+    [723,837], [745,830], [820,828], [823,828], [839,870],
+    [880,925], [934,982],
+    [987,1020], [1038,1042], [1045,1061]
+  ];
+  for (const [lo, hi] of ranges) {
+    if (targetLine >= lo && targetLine <= hi) {
+      showLines(lo, hi);
+      return;
+    }
+  }
+  showLines(targetLine, targetLine);
+})();
+</script>
+</body></html>

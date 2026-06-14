@@ -1,0 +1,60 @@
+# ── Python ──────────────────────────
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ─────────────
+venv/
+.venv/
+env/
+
+# ── Indexes & embeddings (large binary files) ─
+raw-embeddings/
+*.npy
+*.faiss
+*.pkl
+
+# ── Databases ────────────────────────
+chromadb/
+*.sqlite3
+*.db
+
+# ── Evaluation data & logs ───────────
+golden_sets/
+benchmark_results/
+logs/
+eval_set_phase*.txt
+eval_set_phase*.json
+
+# ── Secrets ──────────────────────────
+.env
+*.env
+!.env.example
+
+# ── Temp / editor ────────────────────
+*.bak
+*.bak-*
+.*.bak*
+*.backup-*
+/tmp/
+.DS_Store
+.vscode/
+*.swp
+*~
+*.orig
+
+# ── Jupyter checkpoints ──────────────
+.ipynb_checkpoints/
+
+# ── OCR cache files (personal corpus) ─
+*.ocr.gemini.txt
+*.ocr.gemini-pro.txt
+*.ocr.txt
+
+# ── HTML output ──────────────────────
+/tmp/dsearch_results.html

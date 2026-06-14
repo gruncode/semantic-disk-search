@@ -1,0 +1,15 @@
+# Venv 1: GTE + Cohere + ChromaDB (used by dsearch CLI)
+# Install into: ~/venvs/gte-embed
+# Note: transformers pinned to 4.49 — GTE breaks on 4.50+ (RoPE bug)
+cohere>=5.0
+chromadb>=0.5
+faiss-cpu>=1.7
+numpy>=1.24
+transformers==4.49
+torch>=2.0
+sentence-transformers>=2.7
+json-repair>=0.1
+regex>=2023.0
+openpyxl>=3.1
+xlrd>=2.0
+python-pptx>=0.6

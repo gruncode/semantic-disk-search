@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>semantic-disk-search — Setup Guide</title>
+<style>
+:root {
+  --bg:#0e1626; --panel:#17223b; --ink:#e9eef7; --muted:#95a4c2; --line:#6b7a99;
+  --step:#5db890; --detail:#4fc3d7; --warn:#e8c547; --opt:#e87c3e; --cmd:#95a4c2;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--ink);
+     display:grid;grid-template-columns:290px 1fr 350px;height:100vh;overflow:hidden}
+
+#overview{padding:14px;overflow-y:auto;background:rgba(11,18,32,.55);border-right:1px solid rgba(255,255,255,.06)}
+#overview h2{font-size:14px;margin:2px 0 8px}
+#overview p{font-size:12px;line-height:1.55;color:#cbd5e9;margin:6px 0}
+.ov-layer{font-size:11.5px;line-height:1.5;color:#cbd5e9;margin:5px 0;padding-left:9px;border-left:3px solid rgba(255,255,255,.14)}
+.ov-how{font-size:11px;color:var(--muted);font-style:italic;margin-top:10px}
+.chip{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.time{font-size:11px;background:rgba(232,197,71,.12);border:1px solid rgba(232,197,71,.25);
+      border-radius:4px;padding:2px 6px;color:#e8c547;display:inline-block;margin-top:3px}
+
+#left{padding:10px 14px;overflow:hidden;display:flex;flex-direction:column}
+#left h1{font-size:15px;margin:0 0 3px;font-weight:700}
+.sub{font-size:11px;color:var(--muted);margin-bottom:5px}
+.toolbar{display:flex;gap:6px;align-items:center;margin-bottom:7px;flex-wrap:wrap}
+.btn{background:rgba(255,255,255,.06);color:var(--ink);border:1px solid rgba(255,255,255,.10);
+     border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px}
+.btn:hover{background:rgba(255,255,255,.10)}
+#saved-ind{color:#5db890;font-size:11px;font-weight:600;transition:opacity .3s}
+#wrap{flex:1;overflow:auto;cursor:grab;border-radius:10px;background:rgba(23,34,59,.6)}
+svg{display:block;user-select:none}
+footer{font-size:10px;color:var(--muted);margin-top:5px}
+
+g.node{cursor:move}
+g.node rect.nb{transition:stroke .15s ease}
+g.node:hover rect.nb{stroke:#ffffff!important;stroke-width:2!important}
+g.arrow path{fill:none;stroke:var(--line);stroke-width:1.8;cursor:pointer}
+g.arrow:hover path{stroke:#fff}
+g.arrow.dashed path{stroke-dasharray:6 4}
+g.arrow.opt path{stroke:rgba(232,124,62,.5);stroke-dasharray:4 3}
+g.arrow path.hit-path{stroke:transparent!important;stroke-width:14!important;
+                       stroke-dasharray:none!important;fill:none!important;pointer-events:stroke;cursor:pointer}
+g.label{cursor:move}
+g.label text{fill:var(--muted);font-size:10.5px}
+g.label.warn text{fill:#e8c547;font-weight:600}
+.sel rect.nb{stroke:#f4d35e!important;stroke-width:2.4!important}
+g.arrow.sel path{stroke:#f4d35e!important}
+text{user-select:none;pointer-events:none}
+.nt{font-weight:700;fill:var(--ink);font-size:13px}
+.ns{fill:var(--muted);font-size:10.5px;font-family:ui-monospace,monospace}
+.ni{fill:var(--muted);font-size:10px;font-style:italic}
+.nb2{fill:rgba(79,195,215,.08);stroke:#4fc3d7;stroke-width:1.2}
+
+#right{padding:14px 16px;overflow-y:auto;background:rgba(11,18,32,.55);border-left:1px solid rgba(255,255,255,.06)}
+#right h2{margin:4px 0 6px;font-size:14px}
+.key{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-top:8px}
+#right p{margin:4px 0;font-size:13px;line-height:1.45;color:#cbd5e9}
+#right table{width:100%;font-size:12px;border-collapse:collapse;margin-top:6px}
+#right td{padding:3px 4px;border-bottom:1px dashed rgba(255,255,255,.07);vertical-align:top}
+#right td:first-child{color:var(--muted);width:32%;font-family:ui-monospace,monospace;font-size:11px}
+#right pre{background:rgba(255,255,255,.05);border-radius:6px;padding:8px 10px;font-size:11px;overflow-x:auto;color:#cbd5e9;line-height:1.5}
+.hint{color:var(--muted);font-style:italic;font-size:12px}
+</style>
+</head>
+<body>
+
+<!-- ═══ LEFT: Overview ═══ -->
+<div id="overview">
+  <h2>Setup Overview</h2>
+  <p>Install and configure semantic-disk-search from scratch. Total active time: ~15 minutes. Index building runs unattended.</p>
+  <div class="ov-layer"><span class="chip" style="background:#5db890"></span><strong>Main steps</strong> — prerequisites → clone → venvs → .env → CLI install → indexes → verify</div>
+  <div class="ov-layer"><span class="chip" style="background:#4fc3d7"></span><strong>Detail boxes</strong> — exact commands for each step, shown to the right of the main flow</div>
+  <div class="ov-layer"><span class="chip" style="background:#e87c3e"></span><strong>Options</strong> — CPU vs GPU index build; Cohere vs local FAISS</div>
+  <div class="ov-layer"><span class="chip" style="background:#e8c547"></span><strong>Time estimates</strong> — shown on each box</div>
+  <p style="margin-top:10px;font-size:11.5px;color:#cbd5e9"><strong>Minimum to get started:</strong> prerequisites + venv 1 + .env + CLI install + ChromaDB index (Cohere). Only venv 2 and FAISS indexes are needed for <code>dsearch-multimodel</code>.</p>
+  <p class="ov-how">Click any box for full commands · drag to rearrange · Reset layout restores defaults</p>
+</div>
+
+<!-- ═══ CENTER: Canvas ═══ -->
+<div id="left">
+  <h1>semantic-disk-search — Setup Guide</h1>
+  <div class="sub">Step-by-step installation · click a box for the full commands</div>
+  <div class="toolbar">
+    <button class="btn" onclick="toggleOverview()">⮜ Overview</button>
+    <button class="btn" onclick="toggleDetails()">Details ⮞</button>
+    <button class="btn" onclick="resetAll()">Reset layout</button>
+    <button class="btn" onclick="undoReset()">Undo reset</button>
+    <button class="btn" onclick="exportLayout()">Export…</button>
+    <button class="btn" onclick="document.getElementById('imp').click()">Import…</button>
+    <input id="imp" type="file" accept=".json" style="display:none" onchange="importLayout(event)">
+    <span id="saved-ind"></span>
+  </div>
+  <div id="wrap">
+    <svg id="svg" viewBox="0 0 1620 1120" width="1620" height="1120" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr"  viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9aa6c2"/></marker>
+        <marker id="arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5db890"/></marker>
+        <marker id="arr-t" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="rgba(79,195,215,.7)"/></marker>
+        <marker id="arr-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="rgba(232,124,62,.6)"/></marker>
+      </defs>
+
+      <!-- ═══ ARROWS ═══ -->
+      <g id="arrows">
+        <!-- main vertical flow -->
+        <g class="arrow" data-key="a_start_pre">   <path d="M 475 107 L 475 165" marker-end="url(#arr-g)"/></g>
+        <g class="arrow" data-key="a_pre_clone">   <path d="M 475 292 L 475 350" marker-end="url(#arr-g)"/></g>
+        <g class="arrow" data-key="a_clone_venv">  <path d="M 475 433 L 475 490" marker-end="url(#arr-g)"/></g>
+        <g class="arrow" data-key="a_venv_cfg">    <path d="M 475 590 L 475 648" marker-end="url(#arr-g)"/></g>
+        <g class="arrow" data-key="a_cfg_cli">     <path d="M 475 758 L 475 815" marker-end="url(#arr-g)"/></g>
+        <g class="arrow" data-key="a_cli_idx">     <path d="M 475 895 L 475 950" marker-end="url(#arr-g)"/></g>
+        <g class="arrow" data-key="a_idx_verify">  <path d="M 475 1030 L 475 1065" marker-end="url(#arr-g)"/></g>
+        <!-- detail branches (dashed, right) -->
+        <g class="arrow dashed" data-key="a_venv_d1">  <path d="M 606 520 L 670 520" marker-end="url(#arr-t)"/></g>
+        <g class="arrow dashed" data-key="a_venv_d2">  <path d="M 606 545 L 670 620" marker-end="url(#arr-t)"/></g>
+        <g class="arrow dashed" data-key="a_idx_bm25"> <path d="M 606 965 L 670 958" marker-end="url(#arr-t)"/></g>
+        <g class="arrow dashed" data-key="a_idx_cpu">  <path d="M 606 985 L 670 1060" marker-end="url(#arr-t)"/></g>
+        <!-- GPU option (right of CPU) -->
+        <g class="arrow opt" data-key="a_cpu_gpu">     <path d="M 908 1005 L 960 958" marker-end="url(#arr-o)"/></g>
+      </g>
+
+      <!-- ═══ LABELS ═══ -->
+      <g id="label-layer">
+        <g class="label warn" data-key="l_gpu"><text x="914" y="996">or GPU →</text></g>
+        <g class="label"      data-key="l_opt"><text x="620" y="516">venv 1</text></g>
+        <g class="label"      data-key="l_opt2"><text x="620" y="618">venv 2</text></g>
+        <g class="label"      data-key="l_bm25t"><text x="622" y="951">BM25</text></g>
+        <g class="label"      data-key="l_vect"><text x="622" y="1053">vector</text></g>
+      </g>
+
+      <!-- ═══ NODES ═══ -->
+      <g id="nodes">
+
+        <!-- 0. START -->
+        <g class="node" data-key="S_START" transform="translate(350,45)">
+          <rect class="nb" x="0" y="0" width="250" height="62" rx="12"
+                fill="rgba(93,184,144,.18)" stroke="#5db890" stroke-width="2"/>
+          <text class="nt" x="125" y="22" text-anchor="middle">semantic-disk-search</text>
+          <text class="ns" x="125" y="39" text-anchor="middle">Setup guide · ~15 min active</text>
+          <text class="ni" x="125" y="54" text-anchor="middle">+ index build time (unattended)</text>
+        </g>
+
+        <!-- 1. PREREQUISITES -->
+        <g class="node" data-key="S_PREREQ" transform="translate(350,165)">
+          <rect class="nb" x="0" y="0" width="250" height="127" rx="10"
+                fill="rgba(93,184,144,.10)" stroke="#5db890" stroke-width="1.5"/>
+          <text class="nt" x="125" y="20" text-anchor="middle">Step 0 — Prerequisites</text>
+          <line x1="10" y1="28" x2="240" y2="28" stroke="#5db890" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">Python 3.10+</text>
+          <text class="ns" x="14" y="60">Claude CLI  (npm install -g @anthropic-ai/claude-code)</text>
+          <text class="ns" x="14" y="75">Recoll · pdftotext · antiword</text>
+          <text class="ns" x="14" y="90">Cohere API key  (free tier ≥ queries)</text>
+          <text class="ni" x="14" y="110">sudo apt install python3 recoll poppler-utils antiword</text>
+        </g>
+
+        <!-- 2. CLONE -->
+        <g class="node" data-key="S_CLONE" transform="translate(350,350)">
+          <rect class="nb" x="0" y="0" width="250" height="83" rx="10"
+                fill="rgba(93,184,144,.10)" stroke="#5db890" stroke-width="1.5"/>
+          <text class="nt" x="125" y="20" text-anchor="middle">Step 1 — Clone</text>
+          <line x1="10" y1="28" x2="240" y2="28" stroke="#5db890" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">git clone github.com/YOUR/semantic-disk-search</text>
+          <text class="ns" x="14" y="60">cd semantic-disk-search</text>
+          <text class="ni" x="14" y="76">one-time clone, no ongoing dependencies</text>
+        </g>
+
+        <!-- 3. VENVS -->
+        <g class="node" data-key="S_VENVS" transform="translate(350,490)">
+          <rect class="nb" x="0" y="0" width="250" height="100" rx="10"
+                fill="rgba(93,184,144,.10)" stroke="#5db890" stroke-width="1.5"/>
+          <text class="nt" x="125" y="20" text-anchor="middle">Step 2 — Python venvs →</text>
+          <line x1="10" y1="28" x2="240" y2="28" stroke="#5db890" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">Two separate venvs required</text>
+          <text class="ns" x="14" y="60">GTE needs transformers==4.49 (RoPE bug in 4.50+)</text>
+          <text class="ns" x="14" y="75">Other models need ≥5.0</text>
+          <text class="ni" x="14" y="93">See detail boxes →  requirements-gte.txt / requirements-transformers.txt</text>
+        </g>
+
+        <!-- 4. CONFIGURE .env -->
+        <g class="node" data-key="S_CONFIG" transform="translate(350,648)">
+          <rect class="nb" x="0" y="0" width="250" height="110" rx="10"
+                fill="rgba(93,184,144,.10)" stroke="#5db890" stroke-width="1.5"/>
+          <text class="nt" x="125" y="20" text-anchor="middle">Step 3 — Configure .env</text>
+          <line x1="10" y1="28" x2="240" y2="28" stroke="#5db890" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">cp .env.example ~/.config/dsearch/.env</text>
+          <text class="ns" x="14" y="60">$EDITOR ~/.config/dsearch/.env</text>
+          <text class="ns" x="14" y="78">Set: COHERE_API_KEY · CORPUS_DIR</text>
+          <text class="ns" x="14" y="93">    VENV_GTE · VENV_TF · FAISS_BASE</text>
+          <text class="ni" x="14" y="107">    CHROMADB_DIR · XAPIAN_DB</text>
+        </g>
+
+        <!-- 5. INSTALL CLI -->
+        <g class="node" data-key="S_CLI" transform="translate(350,815)">
+          <rect class="nb" x="0" y="0" width="250" height="80" rx="10"
+                fill="rgba(93,184,144,.10)" stroke="#5db890" stroke-width="1.5"/>
+          <text class="nt" x="125" y="20" text-anchor="middle">Step 4 — Install CLI scripts</text>
+          <line x1="10" y1="28" x2="240" y2="28" stroke="#5db890" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">sudo cp scripts/dsearch* /usr/local/bin/</text>
+          <text class="ns" x="14" y="60">sudo chmod +x /usr/local/bin/dsearch*</text>
+          <text class="ni" x="14" y="77">3 scripts: dsearch · dsearch-answer · dsearch-multimodel</text>
+        </g>
+
+        <!-- 6. BUILD INDEXES -->
+        <g class="node" data-key="S_INDEX" transform="translate(350,950)">
+          <rect class="nb" x="0" y="0" width="250" height="80" rx="10"
+                fill="rgba(93,184,144,.10)" stroke="#5db890" stroke-width="1.5"/>
+          <text class="nt" x="125" y="20" text-anchor="middle">Step 5 — Build indexes →</text>
+          <line x1="10" y1="28" x2="240" y2="28" stroke="#5db890" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">Two indexes: BM25 (Recoll) + vector (ChromaDB or FAISS)</text>
+          <text class="ns" x="14" y="60">One-time build · runs unattended</text>
+          <text class="ni" x="14" y="76">minimum: ChromaDB only  (Cohere API · ~4–8h)</text>
+        </g>
+
+        <!-- 7. VERIFY -->
+        <g class="node" data-key="S_VERIFY" transform="translate(350,1065)">
+          <rect class="nb" x="0" y="0" width="250" height="50" rx="12"
+                fill="rgba(93,184,144,.22)" stroke="#5db890" stroke-width="2"/>
+          <text class="nt" x="125" y="19" text-anchor="middle">Step 6 — Verify</text>
+          <text class="ns" x="125" y="37" text-anchor="middle">dsearch "test query"  →  colour results?  ✓</text>
+        </g>
+
+        <!-- ── VENV DETAIL BOXES ── -->
+        <g class="node" data-key="D_VENV1" transform="translate(670,480)">
+          <rect class="nb" x="0" y="0" width="265" height="115" rx="10"
+                fill="rgba(79,195,215,.08)" stroke="#4fc3d7" stroke-width="1.2"/>
+          <text class="nt" x="132" y="20" text-anchor="middle" style="font-size:12px;fill:#7fdce8">Venv 1: gte-embed</text>
+          <line x1="10" y1="28" x2="255" y2="28" stroke="#4fc3d7" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">python3 -m venv ~/venvs/gte-embed</text>
+          <text class="ns" x="14" y="60">~/venvs/gte-embed/bin/pip install \</text>
+          <text class="ns" x="14" y="75">  cohere chromadb faiss-cpu numpy \</text>
+          <text class="ns" x="14" y="90">  "transformers==4.49" torch \</text>
+          <text class="ns" x="14" y="105">  sentence-transformers json-repair openpyxl xlrd</text>
+        </g>
+
+        <g class="node" data-key="D_VENV2" transform="translate(670,612)">
+          <rect class="nb" x="0" y="0" width="265" height="100" rx="10"
+                fill="rgba(79,195,215,.06)" stroke="#4fc3d7" stroke-width="1.2"/>
+          <text class="nt" x="132" y="20" text-anchor="middle" style="font-size:12px;fill:#7fdce8">Venv 2: transformers</text>
+          <line x1="10" y1="28" x2="255" y2="28" stroke="#4fc3d7" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">python3 -m venv ~/venvs/transformers</text>
+          <text class="ns" x="14" y="60">~/venvs/transformers/bin/pip install \</text>
+          <text class="ns" x="14" y="75">  faiss-cpu numpy "transformers>=5.0" \</text>
+          <text class="ns" x="14" y="92">  torch sentence-transformers jupyter</text>
+        </g>
+
+        <!-- ── INDEX DETAIL BOXES ── -->
+        <g class="node" data-key="D_BM25" transform="translate(670,925)">
+          <rect class="nb" x="0" y="0" width="230" height="90" rx="10"
+                fill="rgba(79,195,215,.08)" stroke="#4fc3d7" stroke-width="1.2"/>
+          <text class="nt" x="115" y="20" text-anchor="middle" style="font-size:12px;fill:#7fdce8">BM25 index (Recoll)</text>
+          <line x1="10" y1="28" x2="220" y2="28" stroke="#4fc3d7" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">make recoll-reindex</text>
+          <text class="ns" x="14" y="60">  (or: recollindex -c ~/.recoll)</text>
+          <text class="ni" x="14" y="77">~30 min – several hours · runs in bg</text>
+        </g>
+
+        <g class="node" data-key="D_CPU" transform="translate(670,1035)">
+          <rect class="nb" x="0" y="0" width="230" height="72" rx="10"
+                fill="rgba(79,195,215,.06)" stroke="#4fc3d7" stroke-width="1.2"/>
+          <text class="nt" x="115" y="20" text-anchor="middle" style="font-size:12px;fill:#7fdce8">Vector index (CPU)</text>
+          <line x1="10" y1="28" x2="220" y2="28" stroke="#4fc3d7" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">make rebuild-cohere   # ChromaDB (recommended)</text>
+          <text class="ns" x="14" y="60">make rebuild-gte      # GTE FAISS</text>
+        </g>
+
+        <g class="node" data-key="D_GPU" transform="translate(960,925)">
+          <rect class="nb" x="0" y="0" width="230" height="90" rx="10"
+                fill="rgba(232,124,62,.08)" stroke="#e87c3e" stroke-width="1.2"/>
+          <text class="nt" x="115" y="20" text-anchor="middle" style="font-size:12px;fill:#f4a77a">Vector index (GPU, faster)</text>
+          <line x1="10" y1="28" x2="220" y2="28" stroke="#e87c3e" stroke-opacity=".3"/>
+          <text class="ns" x="14" y="45">GCP T4 spot instance</text>
+          <text class="ns" x="14" y="60">scripts/gpu_embed_multi.py</text>
+          <text class="ni" x="14" y="77">~1.5h vs ~6h CPU · see README GPU section</text>
+        </g>
+
+        <!-- TIME ANNOTATIONS (small badges) -->
+        <g class="node" data-key="T_PREREQ" transform="translate(80,220)">
+          <rect class="nb" x="0" y="0" width="200" height="42" rx="8"
+                fill="rgba(232,197,71,.08)" stroke="rgba(232,197,71,.3)" stroke-width="1"/>
+          <text x="14" y="16" style="font-size:10px;fill:#e8c547;font-weight:600">⏱ Prereqs</text>
+          <text x="14" y="32" style="font-size:10px;fill:#95a4c2">pip installs: ~5 min each venv</text>
+        </g>
+
+        <g class="node" data-key="T_INDEX" transform="translate(80,985)">
+          <rect class="nb" x="0" y="0" width="200" height="56" rx="8"
+                fill="rgba(232,197,71,.08)" stroke="rgba(232,197,71,.3)" stroke-width="1"/>
+          <text x="14" y="16" style="font-size:10px;fill:#e8c547;font-weight:600">⏱ Index build times</text>
+          <text x="14" y="32" style="font-size:10px;fill:#95a4c2">BM25: 30 min – several hours</text>
+          <text x="14" y="47" style="font-size:10px;fill:#95a4c2">ChromaDB: ~4–8h CPU · ~1.5h GPU</text>
+        </g>
+
+      </g>
+      <g id="handle-layer"></g>
+    </svg>
+  </div>
+  <footer>semantic-disk-search · setup guide · see docs/architecture.html for how the pipeline works</footer>
+</div>
+
+<!-- ═══ RIGHT: Details panel ═══ -->
+<div id="right">
+  <div id="panel"><div class="hint">Click any box to see full commands and notes.</div></div>
+</div>
+
+<script>
+const DATA = {
+  S_START:{title:'semantic-disk-search Setup',desc:'Install and configure semantic-disk-search from scratch. Total active time: ~15 minutes. Index building runs unattended in the background.',props:{'Active time':'~15 minutes','Unattended':'index build: 4–8h (CPU) or 1.5h (GPU)','Minimum':'prerequisites + venv 1 + .env + CLI + ChromaDB only','Full setup':'both venvs + BM25 + ChromaDB + all FAISS indexes'}},
+
+  S_PREREQ:{title:'Step 0 — Prerequisites',desc:'Install system packages, set up Claude CLI, and get API keys before anything else.',props:{'System packages (Debian/Ubuntu)':'sudo apt install python3 python3-venv python3-pip recoll recollindex poppler-utils antiword libreoffice-common','Claude CLI':'npm install -g @anthropic-ai/claude-code','Verify Claude':'claude --version','Cohere key':'https://dashboard.cohere.com/ (free tier sufficient for queries)','Anthropic subscription':'needed for dsearch-answer (claude -p calls)'},
+    cmd:`# System packages
+sudo apt install python3 python3-venv python3-pip \\
+    recoll recollindex \\
+    poppler-utils antiword libreoffice-common
+
+# Claude CLI
+npm install -g @anthropic-ai/claude-code
+claude --version    # verify`},
+
+  S_CLONE:{title:'Step 1 — Clone the repo',desc:'Clone the repository and enter the project directory.',props:{'Repository':'github.com/YOUR_USERNAME/semantic-disk-search','Branch':'main'},
+    cmd:`git clone https://github.com/gruncode/semantic-disk-search.git
+cd semantic-disk-search`},
+
+  S_VENVS:{title:'Step 2 — Create Python venvs',desc:'Two separate Python virtual environments are required. GTE uses a RoPE embedding algorithm that broke in transformers 4.50 — a bug still present in 5.x. All other models work fine with ≥5.0. Keeping them separate avoids dependency conflicts.',props:{'venv 1 (gte-embed)':'for dsearch CLI + Cohere + ChromaDB + GTE model','venv 2 (transformers)':'for e5, bge-m3, Jupyter notebooks','Why separate':'transformers==4.49 (GTE) conflicts with >=5.0 (others)','Requirements files':'requirements-gte.txt / requirements-transformers.txt'},
+    cmd:`# Venv 1: gte-embed (used by dsearch CLI)
+python3 -m venv ~/venvs/gte-embed
+~/venvs/gte-embed/bin/pip install \\
+    cohere chromadb faiss-cpu numpy \\
+    "transformers==4.49" torch \\
+    sentence-transformers json-repair \\
+    regex openpyxl xlrd python-pptx
+
+# Venv 2: transformers (used by dsearch-multimodel + notebooks)
+python3 -m venv ~/venvs/transformers
+~/venvs/transformers/bin/pip install \\
+    faiss-cpu numpy "transformers>=5.0" \\
+    torch sentence-transformers jupyter`},
+
+  S_CONFIG:{title:'Step 3 — Configure .env',desc:'Copy the example environment file and fill in your paths and API keys. All dsearch CLI scripts source this file at runtime.',props:{'File location':'~/.config/dsearch/.env','Template':'cp .env.example ~/.config/dsearch/.env','Required':'COHERE_API_KEY · CORPUS_DIR · VENV_GTE · VENV_TF','Index paths':'FAISS_BASE · CHROMADB_DIR · XAPIAN_DB','Optional (GPU)':'GCP_PROJECT · GCP_INSTANCE · GCP_ZONE'},
+    cmd:`mkdir -p ~/.config/dsearch
+cp .env.example ~/.config/dsearch/.env
+$EDITOR ~/.config/dsearch/.env
+
+# Minimum settings:
+# COHERE_API_KEY=your-key-here
+# CORPUS_DIR=~/Documents        # root of what to search
+# VENV_GTE=~/venvs/gte-embed/bin/python3
+# VENV_TF=~/venvs/transformers/bin/python3
+# FAISS_BASE=~/.local/share/dsearch/faiss
+# CHROMADB_DIR=~/.local/share/dsearch/chromadb
+# XAPIAN_DB=~/.local/share/dsearch/xapiandb`},
+
+  S_CLI:{title:'Step 4 — Install CLI scripts',desc:'Copy the three CLI scripts to /usr/local/bin/ so they are available system-wide without activating a venv. Each script sources the .env and activates the correct venv internally.',props:{'dsearch':'main CLI (terminal, HTML table, AI answer)','dsearch-answer':'6-step AI pipeline (called by dsearch)','dsearch-multimodel':'FAISS search across 5 models'},
+    cmd:`sudo cp scripts/dsearch scripts/dsearch-answer scripts/dsearch-multimodel /usr/local/bin/
+sudo chmod +x /usr/local/bin/dsearch /usr/local/bin/dsearch-answer /usr/local/bin/dsearch-multimodel
+
+# Verify install
+which dsearch && dsearch --help 2>&1 | head -5`},
+
+  S_INDEX:{title:'Step 5 — Build indexes',desc:'Build the search indexes from your corpus. This is a one-time operation that runs unattended. At minimum, build the ChromaDB vector index (used by dsearch). BM25 and FAISS are optional but improve recall.',props:{'Minimum':'ChromaDB only (Cohere API · make rebuild-cohere)','Full':'ChromaDB + BM25 + all 5 FAISS models','BM25':'make recoll-reindex  (30 min – several hours)','ChromaDB (CPU)':'make rebuild-cohere  (~4–8h for large corpus)','ChromaDB (GPU)':'scripts/gpu_embed_multi.py on T4 spot instance'},
+    cmd:`# Set environment variables
+set -a && source ~/.config/dsearch/.env && set +a
+
+# Step 1: extract text chunks
+$VENV_GTE src/extract_chunks.py $CORPUS_DIR \\
+    --output /tmp/chunks.jsonl \\
+    --chunk-size 500 --overlap 100
+
+# Step 2: embed with Cohere → embeddings.npy
+$VENV_GTE scripts/cohere_embed.py \\
+    --chunks /tmp/chunks.jsonl \\
+    --output /tmp/embeddings.npy
+
+# Step 3: load into ChromaDB
+$VENV_GTE scripts/build_chroma_from_embeddings.py \\
+    --chunks /tmp/chunks.jsonl \\
+    --embeddings /tmp/embeddings.npy \\
+    --db $CHROMADB_DIR --collection fulldisk
+
+# Or use make:
+make rebuild-cohere     # full ChromaDB rebuild
+make recoll-reindex     # BM25 (background)`},
+
+  S_VERIFY:{title:'Step 6 — Verify',desc:'Run a test query to confirm the pipeline is working. You should see colour-coded results within a few seconds.',props:{'Quick test':'dsearch "your test query"','Expected output':'green/yellow/red scored file list with snippets','HTML test':'dsearch -w "test query"  → opens browser table','Answer test (slow)':'dsearch -CLexpand-CLrank-CLanswer "your query"  → ~4 min'},
+    cmd:`# Quick terminal test (should show results in <5 sec)
+dsearch "test query"
+
+# HTML table test
+dsearch -w "test query"
+
+# Full answer pipeline test (~4 min)
+dsearch -CLexpand-CLrank-CLanswer "test query"
+
+# Status check
+make status    # shows index sizes + doc counts`},
+
+  D_VENV1:{title:'Venv 1: gte-embed (detail)',desc:'Primary venv used by the dsearch CLI. Contains Cohere client (for embedding), ChromaDB client (for vector retrieval), and the GTE model. Pinned to transformers==4.49 to avoid the RoPE embedding regression.',props:{'Purpose':'dsearch · dsearch-answer · dsearch-multimodel (cohere/gte)','Key pins':'transformers==4.49 (GTE RoPE fix)','Size':'~2.5 GB','Activate':'source ~/venvs/gte-embed/bin/activate'},
+    cmd:`python3 -m venv ~/venvs/gte-embed
+
+~/venvs/gte-embed/bin/pip install \\
+    cohere>=5.0 \\
+    chromadb>=0.5 \\
+    faiss-cpu>=1.7 \\
+    numpy>=1.24 \\
+    "transformers==4.49" \\
+    torch>=2.0 \\
+    sentence-transformers>=2.7 \\
+    json-repair>=0.1 \\
+    regex>=2023.0 \\
+    openpyxl>=3.1 \\
+    xlrd>=2.0 \\
+    python-pptx>=0.6
+
+# Or:
+~/venvs/gte-embed/bin/pip install -r requirements-gte.txt`},
+
+  D_VENV2:{title:'Venv 2: transformers (detail)',desc:'Secondary venv for non-GTE models (e5-base, e5-large, bge-m3) and Jupyter notebooks. Uses transformers>=5.0.',props:{'Purpose':'dsearch-multimodel (e5/bge-m3) · notebooks','Key difference':'no transformers version pin','Size':'~3 GB (includes Jupyter)','Activate':'source ~/venvs/transformers/bin/activate'},
+    cmd:`python3 -m venv ~/venvs/transformers
+
+~/venvs/transformers/bin/pip install \\
+    faiss-cpu>=1.7 \\
+    numpy>=1.24 \\
+    "transformers>=5.0" \\
+    torch>=2.0 \\
+    sentence-transformers>=2.7 \\
+    jupyter>=1.0
+
+# Or:
+~/venvs/transformers/bin/pip install -r requirements-transformers.txt`},
+
+  D_BM25:{title:'BM25 index — Recoll',desc:'Full-text BM25 index built with Recoll. Indexes all corpus files including metadata and OCR sidecar text. Used as the 6th retrieval source in hybrid mode.',props:{'Time':'30 min – several hours (corpus-dependent)','Log':'tail -f /tmp/recoll-reindex.log','Status':'make recoll-status','Config file':'~/.recoll/recoll.conf'},
+    cmd:`# Configure Recoll (if not already done)
+mkdir -p ~/.recoll
+echo "topdirs = $HOME/Documents" >> ~/.recoll/recoll.conf
+
+# Run indexer (background)
+make recoll-reindex
+
+# Monitor progress
+tail -f /tmp/recoll-reindex.log
+
+# Check result
+make recoll-status`},
+
+  D_CPU:{title:'Vector index — CPU build',desc:'Build FAISS or ChromaDB indexes locally on CPU. ChromaDB (Cohere) is recommended as the primary index. FAISS indexes are optional — used by dsearch-multimodel for model comparison.',props:{'ChromaDB (recommended)':'make rebuild-cohere  (~4–8h, needs Cohere API)','GTE FAISS':'make rebuild-gte  (~6.5h on 6-core CPU)','E5-base FAISS':'make rebuild-e5  (~5h)','Output':'FAISS: $FAISS_BASE/{model}/  ·  ChromaDB: $CHROMADB_DIR'},
+    cmd:`set -a && source ~/.config/dsearch/.env && set +a
+
+# Recommended: ChromaDB with Cohere
+make rebuild-cohere
+
+# Optional FAISS indexes (for dsearch-multimodel):
+make rebuild-gte    # GTE model
+make rebuild-e5     # e5-base
+
+# All at once (sequential):
+make rebuild-cohere && make rebuild-gte && make rebuild-e5`},
+
+  D_GPU:{title:'Vector index — GPU build (faster)',desc:'Use a cloud GPU instance to build FAISS indexes much faster. ~1.5h vs ~6h on CPU. Recommended for large corpora (>10GB, >50K documents).',props:{'Instance':'GCP T4 spot (~$0.40/h) or any CUDA GPU','Script':'scripts/gpu_embed_multi.py','Transfer':'scp chunks.jsonl gpu-instance:/tmp/','Total time':'~1.5h including transfer'},
+    cmd:`# 1. Start GCP T4 spot instance
+gcloud compute instances start $GCP_INSTANCE --zone=$GCP_ZONE
+
+# 2. Transfer chunks to GPU instance
+set -a && source ~/.config/dsearch/.env && set +a
+scp /tmp/chunks.jsonl gpu-instance:/tmp/
+
+# 3. Run GPU embedding
+ssh gpu-instance 'python3 gpu_embed_multi.py \\
+    --model gte --chunks /tmp/chunks.jsonl \\
+    --output /tmp/faiss-index/'
+
+# 4. Copy indexes back
+scp -r gpu-instance:/tmp/faiss-index/ $FAISS_BASE/
+
+# 5. Stop instance
+gcloud compute instances stop $GCP_INSTANCE --zone=$GCP_ZONE`},
+
+  T_PREREQ:{title:'Time: Prerequisites',desc:'System package installs take a few minutes. Venv pip installs are ~5 minutes each.',props:{'apt install':'~2 min','pip install venv 1':'~5 min','pip install venv 2':'~4 min'}},
+  T_INDEX:{title:'Time: Index builds',desc:'Index builds depend heavily on corpus size. All run unattended.',props:{'BM25 (Recoll)':'30 min – several hours','ChromaDB CPU':'~4–8h for large corpus','ChromaDB GPU':'~1.5h on T4','GTE FAISS CPU':'~6.5h','E5 FAISS CPU':'~5h'}},
+
+  a_start_pre:{title:'Start → Prerequisites',desc:'Check everything is available before proceeding. The Claude CLI and Cohere API key are the two most commonly forgotten.',props:{}},
+  a_pre_clone:{title:'Prerequisites → Clone',desc:'Once prerequisites are met, clone the repo and enter the directory.',props:{}},
+  a_clone_venv:{title:'Clone → venvs',desc:'Create the two Python environments before configuring .env so you can test venv paths.',props:{}},
+  a_venv_cfg:{title:'Venvs → Configure .env',desc:'After venvs are created, you have the paths to enter as VENV_GTE and VENV_TF.',props:{}},
+  a_cfg_cli:{title:'.env → Install CLI',desc:'Install scripts only after .env is configured so dsearch can find its dependencies immediately.',props:{}},
+  a_cli_idx:{title:'CLI → Build indexes',desc:'With CLI scripts in place, use make targets to build indexes. dsearch itself can\'t run until at least ChromaDB is built.',props:{}},
+  a_idx_verify:{title:'Indexes → Verify',desc:'Once any index is built, run a test query to confirm the pipeline end-to-end.',props:{}},
+  a_venv_d1:{title:'Venv 1 detail',desc:'Commands for creating and populating gte-embed venv (used by dsearch CLI).',props:{}},
+  a_venv_d2:{title:'Venv 2 detail',desc:'Commands for creating and populating transformers venv (used by dsearch-multimodel and notebooks).',props:{}},
+  a_idx_bm25:{title:'BM25 index detail',desc:'Recoll full-text indexing commands.',props:{}},
+  a_idx_cpu:{title:'CPU vector index detail',desc:'CPU-based ChromaDB and FAISS index build commands.',props:{}},
+  a_cpu_gpu:{title:'GPU option',desc:'Alternative GPU-based index build (~4× faster). Requires a CUDA-capable instance.',props:{}},
+};
+
+// ── Engine (same as architecture.html) ──────────────────────────────
+const wrap=document.getElementById('wrap'),svg=document.getElementById('svg');
+const fmt=v=>+v.toFixed(1);
+function svgPt(cx,cy){const p=svg.createSVGPoint();p.x=cx;p.y=cy;return p.matrixTransform(svg.getScreenCTM().inverse())}
+function getTranslate(g){const xf=g.transform.baseVal;if(!xf.numberOfItems)return{dx:0,dy:0};const m=xf.consolidate().matrix;return{dx:m.e,dy:m.f}}
+(function(){document.querySelectorAll('g.arrow[data-key]').forEach(g=>{const v=g.querySelector('path');if(!v)return;const h=v.cloneNode(false);h.setAttribute('class','hit-path');h.removeAttribute('marker-end');g.appendChild(h)})})();
+function setPathD(el,d){el.querySelectorAll('path').forEach(p=>p.setAttribute('d',d))}
+const origPaths={};document.querySelectorAll('g.arrow[data-key]').forEach(g=>{const p=g.querySelector('path');if(p)origPaths[g.dataset.key]=p.getAttribute('d')});
+let manualBends=JSON.parse(localStorage.getItem('setup-bends')||'{}');
+let panning=false,dragMoved=false,panX0=0,panY0=0,scrollX0=0,scrollY0=0;
+wrap.addEventListener('mousedown',e=>{if(e.target!==svg&&e.target!==wrap)return;panning=true;dragMoved=false;panX0=e.clientX;panY0=e.clientY;scrollX0=wrap.scrollLeft;scrollY0=wrap.scrollTop;wrap.style.cursor='grabbing'});
+window.addEventListener('mousemove',e=>{if(!panning)return;wrap.scrollLeft=scrollX0-(e.clientX-panX0);wrap.scrollTop=scrollY0-(e.clientY-panY0);if(Math.abs(e.clientX-panX0)>4||Math.abs(e.clientY-panY0)>4)dragMoved=true});
+window.addEventListener('mouseup',()=>{panning=false;wrap.style.cursor='grab'});
+let elemDrag=null,labelWasDragged=false;
+svg.addEventListener('mousedown',e=>{if(e.target.tagName==='circle'&&e.target.parentElement.id==='handle-layer')return;const hit=e.target.closest('g.node[data-key],g.arrow[data-key]');if(!hit)return;e.stopPropagation();const p=svgPt(e.clientX,e.clientY);const{dx,dy}=getTranslate(hit);elemDrag={el:hit,sx:p.x,sy:p.y,dx,dy,kind:hit.classList[0]};labelWasDragged=false});
+window.addEventListener('mousemove',e=>{if(!elemDrag)return;const p=svgPt(e.clientX,e.clientY);const ndx=elemDrag.dx+(p.x-elemDrag.sx),ndy=elemDrag.dy+(p.y-elemDrag.sy);elemDrag.el.setAttribute('transform',`translate(${ndx.toFixed(1)},${ndy.toFixed(1)})`);if(Math.abs(p.x-elemDrag.sx)>2||Math.abs(p.y-elemDrag.sy)>2)labelWasDragged=true;if(elemDrag.kind==='node')relinkArrowsForNode(elemDrag.el.dataset.key)});
+window.addEventListener('mouseup',()=>{if(!elemDrag)return;if(labelWasDragged){const{dx,dy}=getTranslate(elemDrag.el);const bucket=elemDrag.kind==='node'?'setup-nodes':'setup-arrows';const saved=JSON.parse(localStorage.getItem(bucket)||'{}');saved[elemDrag.el.dataset.key]={dx:+dx.toFixed(1),dy:+dy.toFixed(1)};localStorage.setItem(bucket,JSON.stringify(saved))}elemDrag=null});
+function parsePath(d){const nums=s=>s.match(/[-\d.]+/g).map(Number);const m=d.match(/^M\s*([-\d.]+)\s+([-\d.]+)\s*([LQC])([\s\S]+)$/);if(!m)return null;const P0={x:+m[1],y:+m[2]},cmd=m[3],r=nums(m[4]);if(cmd==='L')return{type:'L',P0,P1:{x:r[0],y:r[1]}};if(cmd==='Q')return{type:'Q',P0,CP:{x:r[0],y:r[1]},P1:{x:r[2],y:r[3]}};return{type:'C',P0,C1:{x:r[0],y:r[1]},C2:{x:r[2],y:r[3]},P1:{x:r[4],y:r[5]}}}
+function pathMid(i){if(i.type==='L')return{x:(i.P0.x+i.P1.x)/2,y:(i.P0.y+i.P1.y)/2};if(i.type==='Q')return{x:(i.P0.x+2*i.CP.x+i.P1.x)/4,y:(i.P0.y+2*i.CP.y+i.P1.y)/4};return{x:(i.P0.x+3*i.C1.x+3*i.C2.x+i.P1.x)/8,y:(i.P0.y+3*i.C1.y+3*i.C2.y+i.P1.y)/8}}
+function bentPath(info,mx,my){const{P0,P1}=info;if(info.type==='L'||info.type==='Q')return`M ${P0.x} ${P0.y} Q ${fmt(2*mx-(P0.x+P1.x)/2)} ${fmt(2*my-(P0.y+P1.y)/2)} ${P1.x} ${P1.y}`;const mid=pathMid(info),dx=(mx-mid.x)*4/3,dy=(my-mid.y)*4/3;return`M ${P0.x} ${P0.y} C ${fmt(info.C1.x+dx)} ${fmt(info.C1.y+dy)}, ${fmt(info.C2.x+dx)} ${fmt(info.C2.y+dy)}, ${P1.x} ${P1.y}`}
+function moveEndpoint(info,which,mx,my){const P0=which==='start'?{x:mx,y:my}:info.P0,P1=which==='end'?{x:mx,y:my}:info.P1;if(info.type==='L')return`M ${fmt(P0.x)} ${fmt(P0.y)} L ${fmt(P1.x)} ${fmt(P1.y)}`;if(info.type==='Q')return`M ${fmt(P0.x)} ${fmt(P0.y)} Q ${fmt(info.CP.x)} ${fmt(info.CP.y)} ${fmt(P1.x)} ${fmt(P1.y)}`;return`M ${fmt(P0.x)} ${fmt(P0.y)} C ${fmt(info.C1.x)} ${fmt(info.C1.y)}, ${fmt(info.C2.x)} ${fmt(info.C2.y)}, ${fmt(P1.x)} ${fmt(P1.y)}`}
+const handleLayer=document.getElementById('handle-layer');
+function showHandle(arrowEl){hideHandle();const path=arrowEl.querySelector('path'),info=path&&parsePath(path.getAttribute('d'));if(!info)return;const t=getTranslate(arrowEl);[{type:'start',pt:info.P0,fill:'#60c0f0',r:5},{type:'mid',pt:pathMid(info),fill:'#f4d35e',r:7},{type:'end',pt:info.P1,fill:'#60c0f0',r:5}].forEach(h=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',fmt(h.pt.x+t.dx));c.setAttribute('cy',fmt(h.pt.y+t.dy));c.setAttribute('r',h.r);c.setAttribute('fill',h.fill);c.setAttribute('stroke','#222');c.setAttribute('stroke-width','1.5');c.style.cursor='crosshair';c.dataset.arrowKey=arrowEl.dataset.key;c.dataset.handleType=h.type;handleLayer.appendChild(c)})}
+function hideHandle(){while(handleLayer.firstChild)handleLayer.removeChild(handleLayer.firstChild)}
+function updateHandlePositions(arrowEl){const path=arrowEl.querySelector('path'),info=path&&parsePath(path.getAttribute('d'));if(!info)return;const t=getTranslate(arrowEl),map={start:info.P0,mid:pathMid(info),end:info.P1};handleLayer.querySelectorAll('circle').forEach(c=>{const pt=map[c.dataset.handleType];if(pt){c.setAttribute('cx',fmt(pt.x+t.dx));c.setAttribute('cy',fmt(pt.y+t.dy))}})}
+let bendDrag=null;
+handleLayer.addEventListener('mousedown',e=>{if(e.target.tagName!=='circle')return;e.stopPropagation();e.preventDefault();const arrowEl=document.querySelector('g.arrow[data-key="'+e.target.dataset.arrowKey+'"]');if(!arrowEl)return;bendDrag={key:e.target.dataset.arrowKey,arrowEl,handleType:e.target.dataset.handleType,info:parsePath(arrowEl.querySelector('path').getAttribute('d'))}});
+window.addEventListener('mousemove',e=>{if(!bendDrag)return;const p=svgPt(e.clientX,e.clientY),t=getTranslate(bendDrag.arrowEl),mx=p.x-t.dx,my=p.y-t.dy;const newD=bendDrag.handleType==='mid'?bentPath(bendDrag.info,mx,my):moveEndpoint(bendDrag.info,bendDrag.handleType,mx,my);if(newD){setPathD(bendDrag.arrowEl,newD);updateHandlePositions(bendDrag.arrowEl)}},{capture:true});
+window.addEventListener('mouseup',()=>{if(!bendDrag)return;const d=bendDrag.arrowEl.querySelector('path').getAttribute('d');manualBends[bendDrag.key]=d;localStorage.setItem('setup-bends',JSON.stringify(manualBends));bendDrag=null},{capture:true});
+
+const AUTO_LINKS={
+  a_start_pre: {src:'S_START', srcSide:'bottom',dst:'S_PREREQ',dstSide:'top'},
+  a_pre_clone: {src:'S_PREREQ',srcSide:'bottom',dst:'S_CLONE', dstSide:'top'},
+  a_clone_venv:{src:'S_CLONE', srcSide:'bottom',dst:'S_VENVS', dstSide:'top'},
+  a_venv_cfg:  {src:'S_VENVS', srcSide:'bottom',dst:'S_CONFIG',dstSide:'top'},
+  a_cfg_cli:   {src:'S_CONFIG',srcSide:'bottom',dst:'S_CLI',   dstSide:'top'},
+  a_cli_idx:   {src:'S_CLI',   srcSide:'bottom',dst:'S_INDEX', dstSide:'top'},
+  a_idx_verify:{src:'S_INDEX', srcSide:'bottom',dst:'S_VERIFY',dstSide:'top'},
+  a_venv_d1:   {src:'S_VENVS', srcSide:'right', dst:'D_VENV1', dstSide:'left'},
+  a_venv_d2:   {src:'S_VENVS', srcSide:'right', dst:'D_VENV2', dstSide:'left'},
+  a_idx_bm25:  {src:'S_INDEX', srcSide:'right', dst:'D_BM25',  dstSide:'left'},
+  a_idx_cpu:   {src:'S_INDEX', srcSide:'right', dst:'D_CPU',   dstSide:'left'},
+  a_cpu_gpu:   {src:'D_CPU',   srcSide:'right', dst:'D_GPU',   dstSide:'left'},
+};
+const AUTO_LINKS_DEFAULTS=JSON.parse(JSON.stringify(AUTO_LINKS));
+function nodeRect(key){const g=document.querySelector('g.node[data-key="'+key+'"]');if(!g)return null;const rect=g.querySelector('rect.nb');if(!rect)return null;const t=getTranslate(g);return{x:t.dx+(+rect.getAttribute('x')||0),y:t.dy+(+rect.getAttribute('y')||0),w:+rect.getAttribute('width'),h:+rect.getAttribute('height')}}
+function edgePoint(r,side){if(side==='top')return{x:r.x+r.w/2,y:r.y};if(side==='bottom')return{x:r.x+r.w/2,y:r.y+r.h};if(side==='left')return{x:r.x,y:r.y+r.h/2};return{x:r.x+r.w,y:r.y+r.h/2}}
+function sideNormal(s){return s==='top'?[0,-1]:s==='bottom'?[0,1]:s==='left'?[-1,0]:[1,0]}
+function pickFacingSide(myR,otherR){const dx=(otherR.x+otherR.w/2)-(myR.x+myR.w/2),dy=(otherR.y+otherR.h/2)-(myR.y+myR.h/2);return Math.abs(dy)>Math.abs(dx)?(dy>0?'bottom':'top'):(dx>0?'right':'left')}
+function relinkArrow(key){if(manualBends[key])return;const link=AUTO_LINKS[key];if(!link)return;const srcR=nodeRect(link.src),dstR=nodeRect(link.dst);if(!srcR||!dstR)return;const ss=link.srcSide==='auto'?pickFacingSide(srcR,dstR):link.srcSide,ds=link.dstSide==='auto'?pickFacingSide(dstR,srcR):link.dstSide;const p0=edgePoint(srcR,ss),p1=edgePoint(dstR,ds),sn=sideNormal(ss),dn=sideNormal(ds);const k=Math.max(40,Math.min(200,Math.hypot(p1.x-p0.x,p1.y-p0.y)*0.4));const d=`M ${fmt(p0.x)} ${fmt(p0.y)} C ${fmt(p0.x+sn[0]*k)} ${fmt(p0.y+sn[1]*k)}, ${fmt(p1.x+dn[0]*k)} ${fmt(p1.y+dn[1]*k)}, ${fmt(p1.x)} ${fmt(p1.y)}`;const arrowEl=document.querySelector('g.arrow[data-key="'+key+'"]');if(!arrowEl)return;arrowEl.removeAttribute('transform');setPathD(arrowEl,d)}
+function relinkArrowsForNode(nodeKey){for(const[k,l]of Object.entries(AUTO_LINKS))if(l.src===nodeKey||l.dst===nodeKey)relinkArrow(k)}
+function relinkAllAutoLinks(){for(const k of Object.keys(AUTO_LINKS))relinkArrow(k)}
+
+const panel=document.getElementById('panel');
+function showPanel(key){const d=DATA[key];if(!d){panel.innerHTML='<div class="hint">No info for '+key+'</div>';return}let h='<h2>'+d.title+'</h2>';if(d.desc)h+='<p>'+d.desc+'</p>';if(d.props&&Object.keys(d.props).length){h+='<div class="key">Details</div><table>';for(const[k,v]of Object.entries(d.props))h+='<tr><td>'+k+'</td><td>'+v+'</td></tr>';h+='</table>'}if(d.cmd)h+='<div class="key">Commands</div><pre>'+d.cmd+'</pre>';panel.innerHTML=h}
+let selectedArrow=null;
+svg.addEventListener('click',e=>{if(dragMoved||labelWasDragged){dragMoved=false;labelWasDragged=false;return}const hit=e.target.closest('g.node[data-key],g.arrow[data-key]');if(selectedArrow){selectedArrow.classList.remove('sel');selectedArrow=null;hideHandle()}document.querySelectorAll('g.node.sel').forEach(g=>g.classList.remove('sel'));if(!hit){panel.innerHTML='<div class="hint">Click any box or arrow to see commands and details.</div>';return}hit.classList.add('sel');showPanel(hit.dataset.key);if(hit.classList.contains('arrow')){selectedArrow=hit;showHandle(hit)}});
+function snapshotLayout(){return{nodes:JSON.parse(localStorage.getItem('setup-nodes')||'{}'),arrows:JSON.parse(localStorage.getItem('setup-arrows')||'{}'),bends:JSON.parse(localStorage.getItem('setup-bends')||'{}')}}
+function applySnapshot(s){if(!s)return;if(s.nodes)localStorage.setItem('setup-nodes',JSON.stringify(s.nodes));if(s.arrows)localStorage.setItem('setup-arrows',JSON.stringify(s.arrows));if(s.bends)localStorage.setItem('setup-bends',JSON.stringify(s.bends));for(const[bucket,sel]of[['nodes','g.node[data-key="'],['arrows','g.arrow[data-key="']]){for(const[key,p]of Object.entries(s[bucket]||{})){const g=document.querySelector(sel+key+'"]');if(g)g.setAttribute('transform',`translate(${p.dx},${p.dy})`)}}manualBends=Object.assign({},s.bends||{});for(const[k,d]of Object.entries(manualBends)){const g=document.querySelector('g.arrow[data-key="'+k+'"]');if(g)setPathD(g,d)}relinkAllAutoLinks()}
+(function(){for(const bucket of['setup-nodes','setup-arrows']){const saved=JSON.parse(localStorage.getItem(bucket)||'{}'),sel=bucket.endsWith('nodes')?'g.node[data-key="':'g.arrow[data-key="';for(const[key,p]of Object.entries(saved)){const g=document.querySelector(sel+key+'"]');if(g)g.setAttribute('transform',`translate(${p.dx},${p.dy})`)}}manualBends=JSON.parse(localStorage.getItem('setup-bends')||'{}');for(const[k,d]of Object.entries(manualBends)){const g=document.querySelector('g.arrow[data-key="'+k+'"]');if(g)setPathD(g,d)}relinkAllAutoLinks()})();
+const _si=localStorage.setItem.bind(localStorage);localStorage.setItem=function(k,v){_si(k,v);if(k.startsWith('setup-')&&k!=='setup-undo'){const si=document.getElementById('saved-ind');if(si){si.textContent='✓ saved '+new Date().toLocaleTimeString();si.style.opacity='1';clearTimeout(si._t);si._t=setTimeout(()=>{si.style.opacity='.45'},1500)}}};
+function resetAll(){if(!confirm('Reset layout?'))return;localStorage.setItem('setup-undo',JSON.stringify(snapshotLayout()));document.querySelectorAll('g.node[data-key],g.arrow[data-key]').forEach(g=>g.removeAttribute('transform'));for(const[k,d]of Object.entries(origPaths)){const g=document.querySelector('g.arrow[data-key="'+k+'"]');if(g)setPathD(g,d)}['setup-nodes','setup-arrows','setup-bends'].forEach(k=>localStorage.removeItem(k));manualBends={};relinkAllAutoLinks();hideHandle();if(selectedArrow){selectedArrow.classList.remove('sel');selectedArrow=null}document.querySelectorAll('g.node.sel').forEach(g=>g.classList.remove('sel'))}
+function undoReset(){const raw=localStorage.getItem('setup-undo');if(!raw){alert('No undo snapshot.');return}applySnapshot(JSON.parse(raw))}
+function exportLayout(){const blob=new Blob([JSON.stringify(snapshotLayout(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='setup-layout.json';document.body.appendChild(a);a.click();a.remove()}
+function importLayout(ev){const file=ev.target.files&&ev.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{localStorage.setItem('setup-undo',JSON.stringify(snapshotLayout()));applySnapshot(JSON.parse(reader.result))}catch(e){alert('Bad JSON: '+e.message)}};reader.readAsText(file);ev.target.value=''}
+function applyGrid(){const o=document.getElementById('overview').style.display!=='none',r=document.getElementById('right').style.display!=='none';document.body.style.gridTemplateColumns=`${o?'290px':'0'} 1fr ${r?'350px':'0'}`}
+function savePanels(){localStorage.setItem('setup-panels',JSON.stringify({overview:document.getElementById('overview').style.display!=='none',details:document.getElementById('right').style.display!=='none'}))}
+function toggleOverview(){const o=document.getElementById('overview');o.style.display=(o.style.display==='none')?'':'none';applyGrid();savePanels()}
+function toggleDetails(){const r=document.getElementById('right');r.style.display=(r.style.display==='none')?'':'none';applyGrid();savePanels()}
+(function(){const p=JSON.parse(localStorage.getItem('setup-panels')||'{}');if(p.overview===false)document.getElementById('overview').style.display='none';if(p.details===false)document.getElementById('right').style.display='none';applyGrid()})();
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+# Semantic Disk Search — Model & Path Configuration
+# All 5 embedding models + external data paths + chunking params
+
+models:
+  cohere-v3:
+    name: cohere/embed-multilingual-v3.0
+    dim: 1024
+    faiss_dir: $FAISS_BASE/cohere-v3
+    venv: $VENV_GTE
+    api_key_env: COHERE_API_KEY
+    prefix: false
+    default: true
+    notes: Best Greek precision, no false positives from English tech docs
+
+  e5-base:
+    name: intfloat/multilingual-e5-base
+    dim: 768
+    faiss_dir: $FAISS_BASE/e5-base
+    venv: $VENV_TF
+    prefix: true  # needs "query:"/"passage:" prefixes
+    notes: Good retrieval asymmetry, found emails others missed
+
+  e5-large:
+    name: intfloat/multilingual-e5-large
+    dim: 1024
+    faiss_dir: $FAISS_BASE/e5-large
+    venv: $VENV_TF
+    prefix: true
+    notes: Broadest coverage for legal/procedural documents
+
+  gte:
+    name: Alibaba-NLP/gte-multilingual-base
+    dim: 768
+    faiss_dir: $FAISS_BASE/gte
+    venv: $VENV_GTE  # requires transformers<=4.49
+    prefix: false
+    trust_remote_code: true
+    notes: Sharpest score distribution, 8K context, confused by SCADA noise
+
+  bge-m3:
+    name: BAAI/bge-m3
+    dim: 1024
+    faiss_dir: $FAISS_BASE/bge-m3
+    venv: $VENV_TF
+    prefix: false
+    notes: Disappointing on real Greek queries despite strong MTEB benchmarks
+
+paths:
+  corpus: $CORPUS_DIR  # set in .env
+  recoll_conf: ~/.recoll
+  xapian_db: $XAPIAN_DB
+  chromadb: $CHROMADB_DIR
+  faiss_base: $FAISS_BASE
+
+  hf_cache: $HF_HOME
+  ocr_server: $OCR_SERVER
+  ocr_exclude: $OCR_SERVER/ocr-exclude-paths.txt
+  api_keys: ~/.config/dsearch/.env
+  # old_project: ~/ComputerWork/myProjects/recoll-hybrid-search-2DELETE
+
+venvs:
+  gte_embed: $VENV_GTE      # transformers 4.49, faiss, cohere, chromadb
+  transformers: $VENV_TF  # transformers 5.0, faiss, jupyter
+
+cli:
+  dsearch_multimodel: /usr/local/bin/dsearch-multimodel
+  docsearch: /usr/local/bin/docsearch
+  docsearch_all: /usr/local/bin/docsearch-all
+
+chunking:
+  size: 500
+  overlap: 100
+  min_length: 30
+  max_text_chars: 30000
+
+cloud:
+  gcp_project: YOUR_GCP_PROJECT  # "my-corpus"
+  gcp_instance: embedding-gpu        # europe-west1-b, T4 spot, STOPPED
+  gcp_cost_per_hr: 0.18
