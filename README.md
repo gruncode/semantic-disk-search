@@ -14,6 +14,10 @@ dsearch -w "invoice Q3"                           # sortable HTML table in brows
 dsearch -CLexpand-CLrank-CLanswer "my query"      # full AI answer with citations (~4 min)
 dsearch -CLexpand-CLrank-CLanswer -deep "query"   # deep multi-hop retrieval (~7 min)
 dsearch-multimodel --model gte "my query"         # compare across 5 embedding models
+
+dsearch2 "pension fund certificate"               # v2: hybrid vector+TF with RRF merge
+dsearch2 --json "insurance claim" | jq .          # structured JSON output
+dsearch2 --debug "ασφαλιστικό"                    # show alias expansion + fetch stats
 ```
 
 ---
@@ -246,6 +250,51 @@ dsearch-multimodel --model e5  "pump maintenance schedule"
 
 ---
 
+## dsearch2 — hybrid retriever (v2)
+
+`dsearch2` is a standalone hybrid retriever built on top of the Cohere ChromaDB index. It adds **TF lexical scoring** and **RRF (Reciprocal Rank Fusion)** on top of vector distance, plus **alias expansion** for multilingual synonym matching.
+
+### How it differs from `dsearch`
+
+| Feature | dsearch | dsearch2 |
+|---|---|---|
+| Vector retrieval | Cohere + ChromaDB | Cohere + ChromaDB |
+| Lexical scoring | None | TF over returned chunks |
+| Rank fusion | Vector rank only | RRF (vector + TF) |
+| Alias expansion | Via Claude Step 1 | Built-in, read from alias_map.json |
+| Source tier boost | None | A→+0.4% / D→-0.2% |
+| Claude calls | Yes (Steps 1, 4, 6) | None — retrieval only |
+| Output modes | terminal, HTML, answer | terminal, JSON |
+| HNSW candidate pool | n_results × 3 | max(n_results × 3, 1000) |
+
+The larger candidate pool (`max(..., 1000)`) is critical for HNSW recall on large collections (950K+ chunks) where a small probe set degrades accuracy.
+
+### Usage
+
+```bash
+dsearch2 "pension fund certificate"
+dsearch2 -n 30 "ασφαλιστικό ταμείο"
+dsearch2 --json "invoice delay" | jq '.results[].path'
+dsearch2 --show-aliases                 # list all alias groups
+dsearch2 --debug "query"                # print fetch count, alias expansion, top ranks
+dsearch2 --no-alias "query"            # disable alias expansion
+```
+
+### Config
+
+All paths are read from `~/.config/dsearch/.env`:
+
+```bash
+CHROMADB_DIR=~/.local/share/dsearch/chromadb
+DSEARCH_COLLECTION=fulldisk-1k
+DSEARCH_ALIAS_MAP=configs/alias_map.json
+COHERE_API_KEY=your-key
+# Optional: colon-separated paths to suppress from non-tool queries
+DSEARCH_META_PREFIXES=/path/to/project-docs
+```
+
+---
+
 ## Makefile targets
 
 ```
@@ -271,6 +320,7 @@ scripts/
   dsearch              main CLI — terminal, HTML, and answer modes
   dsearch-answer       6-step AI answer pipeline (called by dsearch)
   dsearch-multimodel   FAISS search across any of the 5 models
+  dsearch2             v2 hybrid retriever — vector + TF + RRF, alias expansion, tier boosts
   cohere_embed.py      batch embed chunks via Cohere API
   build_chroma_from_embeddings.py  load embeddings into ChromaDB
 

@@ -1,0 +1,343 @@
+#!/usr/bin/env python3
+# dsearch2 — Hybrid semantic+lexical retriever (vector + TF + RRF).
+# Read-only: does NOT modify ChromaDB.
+# Keywords: dsearch2, semantic search, hybrid, BM25, RRF, alias, passage retriever
+#
+# Run inside the gte-embed venv (or any venv that has cohere + chromadb):
+#   ~/venvs/gte-embed/bin/python3 scripts/dsearch2 "my query"
+# Or install into PATH:
+#   sudo ln -sf $(pwd)/scripts/dsearch2 /usr/local/bin/dsearch2
+#   sudo chmod +x /usr/local/bin/dsearch2
+import sys, os, json, re, argparse, math, unicodedata
+from collections import Counter
+
+# ── Config — reads from ~/.config/dsearch/.env if set ───────────────────────
+
+def _env(key, default):
+    return os.environ.get(key, default)
+
+# Set CHROMADB_DIR and DSEARCH_COLLECTION in your ~/.config/dsearch/.env
+CHROMA_DIR   = _env('CHROMADB_DIR',    os.path.expanduser('~/.local/share/dsearch/chromadb'))
+COLLECTION   = _env('DSEARCH_COLLECTION', 'fulldisk-1k')
+COHERE_MODEL = 'embed-multilingual-v3.0'
+ALIAS_PATH   = _env('DSEARCH_ALIAS_MAP',
+                    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 'configs', 'alias_map.json'))
+
+RRF_K        = 60  # RRF damping constant (standard value; increase if top results feel too repetitive)
+# source-tier tiebreaker (tiny — relevance dominates)
+TIER_BOOST   = {'A': 0.004, 'B': 0.002, 'C': 0.0, 'D': -0.002}
+DEFAULT_TOP  = 20
+
+# Paths that are part of this project's own metadata — slightly penalised when
+# the query is NOT about the search tool itself, so the tool doesn't surface its
+# own docs for unrelated queries. Set DSEARCH_META_PREFIXES="" to disable.
+_raw_prefixes = _env('DSEARCH_META_PREFIXES', '')
+PROJECT_META_PREFIXES = [p.strip() for p in _raw_prefixes.split(':') if p.strip()]
+PROJECT_PENALTY = -0.008
+PROJECT_QUERY_TERMS = {
+    'dsearch', 'dsearch2', 'semantic', 'search', 'chromadb', 'chroma',
+    'benchmark', 'eval', 'status', 'retrieval', 'embedding', 'cohere',
+    'phase', 'tier', 'classifier', 'rrf',
+}
+
+# ── API key loader ────────────────────────────────────────────────────────────
+
+def load_env_keys():
+    # Load ~/.config/dsearch/.env into os.environ (COHERE_API_KEY etc.)
+    env_file = os.path.expanduser('~/.config/dsearch/.env')
+    try:
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if '=' in line and not line.startswith('#'):
+                    k, v = line.split('=', 1)
+                    os.environ.setdefault(k.strip(), v.strip())
+    except FileNotFoundError:
+        pass
+
+# ── Alias map ────────────────────────────────────────────────────────────────
+
+def _norm(s):
+    # lowercase + strip Greek accents for fuzzy matching
+    nfkd = unicodedata.normalize('NFKD', s.lower())
+    return ''.join(c for c in nfkd if unicodedata.category(c) != 'Mn')
+
+def load_aliases(path=ALIAS_PATH):
+    # returns (normed_key → set_of_original_aliases, max_phrase_len)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except Exception:
+        return {}, 1
+    amap = {}
+    max_words = 1
+    for group in data.get('aliases', []):
+        originals = set(t.lower() for t in group)
+        for term in group:
+            key = _norm(term)
+            amap[key] = originals
+            max_words = max(max_words, len(key.split()))
+    return amap, max_words
+
+def expand_query(query, alias_map, max_phrase_len=3):
+    # Expand query using alias map, supporting multi-word phrases.
+    # Scans with sliding window (longest-first) to avoid partial-phrase collisions.
+    tokens = query.lower().split()
+    normed_tokens = [_norm(t) for t in tokens]
+    expanded = list(tokens)
+    aliases_used = []
+    seen = set(_norm(t) for t in tokens)
+    matched_spans = set()
+
+    for window in range(min(max_phrase_len, len(tokens)), 0, -1):
+        for i in range(len(tokens) - window + 1):
+            if any(j in matched_spans for j in range(i, i + window)):
+                continue
+            phrase = ' '.join(normed_tokens[i:i + window])
+            if phrase in alias_map:
+                for j in range(i, i + window):
+                    matched_spans.add(j)
+                for alias in sorted(alias_map[phrase]):
+                    normed_alias = _norm(alias)
+                    if normed_alias not in seen:
+                        expanded.append(alias)
+                        seen.add(normed_alias)
+                        aliases_used.append(alias)
+
+    return ' '.join(expanded), sorted(aliases_used)
+
+# ── Lexical TF scoring (over returned chunks only) ────────────────────────────
+
+def strip_accents(s):
+    nfkd = unicodedata.normalize('NFKD', s)
+    return ''.join(c for c in nfkd if unicodedata.category(c) != 'Mn')
+
+def tf_score(text, query_terms):
+    # 1 + log(1+tf) per matched query term (accent/case-insensitive)
+    text_lower = strip_accents(text.lower())
+    score = 0
+    for term in query_terms:
+        term_clean = strip_accents(term.lower())
+        if len(term_clean) < 2:
+            continue
+        count = text_lower.count(term_clean)
+        if count > 0:
+            score += 1 + math.log(1 + count)
+    return score
+
+# ── RRF merge ─────────────────────────────────────────────────────────────────
+
+def rrf_merge(vec_ranked_ids, tf_ranked_ids, chunk_data, k=RRF_K, query_text=''):
+    # score = 1/(k+vec_rank) + 1/(k+tf_rank) + tier_boost + project_penalty
+    all_ids = set(vec_ranked_ids) | set(tf_ranked_ids)
+    vec_rank = {cid: rank for rank, cid in enumerate(vec_ranked_ids)}
+    tf_rank  = {cid: rank for rank, cid in enumerate(tf_ranked_ids)}
+    max_rank = len(all_ids) + 1
+
+    q_words = set(_norm(query_text).split()) if query_text else set()
+    is_project_query = bool(q_words & PROJECT_QUERY_TERMS)
+
+    scores = {}
+    for cid in all_ids:
+        vr = vec_rank.get(cid, max_rank)
+        tr = tf_rank.get(cid, max_rank)
+        tier = chunk_data.get(cid, {}).get('tier', 'D')
+        boost = TIER_BOOST.get(tier, 0.0)
+        path = chunk_data.get(cid, {}).get('path', '')
+        penalty = 0.0
+        if PROJECT_META_PREFIXES and not is_project_query:
+            if any(path.startswith(pfx) for pfx in PROJECT_META_PREFIXES):
+                penalty = PROJECT_PENALTY
+        scores[cid] = 1.0 / (k + vr) + 1.0 / (k + tr) + boost + penalty
+
+    tier_order = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
+    ranked = sorted(scores.keys(),
+                    key=lambda cid: (
+                        -scores[cid],
+                        tier_order.get(chunk_data.get(cid, {}).get('tier', 'D'), 3),
+                        chunk_data.get(cid, {}).get('path', ''),
+                        cid
+                    ))
+    return ranked, scores
+
+# ── Cohere embed ──────────────────────────────────────────────────────────────
+
+def embed_query(query_text):
+    import cohere
+    api_key = os.environ.get('COHERE_API_KEY', '')
+    if not api_key:
+        print('ERROR: COHERE_API_KEY not set. Add it to ~/.config/dsearch/.env', file=sys.stderr)
+        sys.exit(1)
+    co = cohere.ClientV2(api_key=api_key)
+    resp = co.embed(
+        texts=[query_text],
+        model=COHERE_MODEL,
+        input_type='search_query',
+        embedding_types=['float']
+    )
+    return resp.embeddings.float_[0]
+
+# ── ChromaDB query ────────────────────────────────────────────────────────────
+
+def query_chromadb(embedding, n_results):
+    import chromadb
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
+    try:
+        col = client.get_collection(COLLECTION)
+    except Exception:
+        return None, 0
+    count = col.count()
+    if count == 0:
+        return None, 0
+    # Fetch more than needed for TF re-ranking.
+    # min 1000: HNSW recall degrades on 950K+ collections when candidate pool is too small.
+    fetch_n = min(max(n_results * 3, 1000), count)
+    results = col.query(
+        query_embeddings=[embedding],
+        n_results=fetch_n,
+        include=['documents', 'metadatas', 'distances']
+    )
+    return results, count
+
+# ── Output formatting ─────────────────────────────────────────────────────────
+
+TIER_LABEL = {'A': '\033[32mA\033[0m', 'B': '\033[34mB\033[0m',
+              'C': '\033[33mC\033[0m', 'D': '\033[90mD\033[0m'}
+
+def print_terminal(ranked_ids, scores, chunk_data, top_n):
+    for i, cid in enumerate(ranked_ids[:top_n]):
+        cd = chunk_data[cid]
+        tier = cd.get('tier', '?')
+        label = TIER_LABEL.get(tier, tier)
+        path = cd.get('path', '?')
+        score = scores[cid]
+        text = cd.get('text', '').replace('\n', ' ')[:120]
+        print(f'{i+1:3d}. [{label}] {score:.4f}  {path}')
+        print(f'     {text}')
+
+def build_json_output(ranked_ids, scores, chunk_data, top_n, query_orig, query_exp, aliases_used):
+    results = []
+    for i, cid in enumerate(ranked_ids[:top_n]):
+        cd = chunk_data[cid]
+        results.append({
+            'rank': i + 1,
+            'chunk_id': cid,
+            'path': cd.get('path', ''),
+            'source_tier': cd.get('tier', 'D'),
+            'score': round(scores[cid], 6),
+            'text': cd.get('text', '')
+        })
+    return json.dumps({
+        'query_original': query_orig,
+        'query_expanded': query_exp,
+        'aliases_used': aliases_used,
+        'total_results': len(results),
+        'results': results
+    }, ensure_ascii=False, indent=2)
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog='dsearch2',
+        description='Hybrid semantic+lexical retriever (vector + TF + RRF). Read-only.')
+    parser.add_argument('query', nargs='*', help='search query words')
+    parser.add_argument('--json',         action='store_true', help='JSON output')
+    parser.add_argument('--top', '-n',    type=int, default=DEFAULT_TOP,
+                        help=f'number of results (default {DEFAULT_TOP})')
+    parser.add_argument('--show-aliases', action='store_true',
+                        help='print alias groups and exit')
+    parser.add_argument('--no-alias',     action='store_true',
+                        help='disable alias expansion')
+    parser.add_argument('--debug',        action='store_true',
+                        help='print debug info (ranks, scores, fetch count)')
+    args = parser.parse_args()
+
+    load_env_keys()
+
+    if args.show_aliases:
+        try:
+            with open(ALIAS_PATH) as f:
+                amap_raw = json.load(f)
+        except Exception as e:
+            print(f'ERROR loading alias map: {e}', file=sys.stderr)
+            sys.exit(1)
+        print(f'Alias map ({ALIAS_PATH}):')
+        for group in amap_raw.get('aliases', []):
+            print(f'  {" | ".join(group)}')
+        print(f'\n{len(amap_raw.get("aliases", []))} alias groups loaded.')
+        sys.exit(0)
+
+    if not args.query:
+        parser.print_help()
+        sys.exit(0)
+    query_orig = ' '.join(args.query)
+
+    if args.no_alias:
+        alias_map, max_phr = {}, 1
+    else:
+        alias_map, max_phr = load_aliases()
+    query_exp, aliases_used = (
+        expand_query(query_orig, alias_map, max_phr) if alias_map
+        else (query_orig, [])
+    )
+
+    if args.debug:
+        print(f'Query original: {query_orig}', file=sys.stderr)
+        print(f'Query expanded: {query_exp}', file=sys.stderr)
+        if aliases_used:
+            print(f'Aliases used:   {aliases_used}', file=sys.stderr)
+
+    embedding = embed_query(query_exp)
+
+    results, total_chunks = query_chromadb(embedding, args.top)
+    if results is None or total_chunks == 0:
+        msg = f'Collection "{COLLECTION}" has 0 chunks. Run dsearch2-update first.'
+        if args.json:
+            print(json.dumps({'query_original': query_orig, 'query_expanded': query_exp,
+                              'aliases_used': aliases_used, 'total_results': 0,
+                              'message': msg, 'results': []}, ensure_ascii=False, indent=2))
+        else:
+            print(msg)
+        sys.exit(0)
+
+    ids   = results['ids'][0]
+    docs  = results['documents'][0]
+    metas = results['metadatas'][0]
+    dists = results['distances'][0]
+
+    chunk_data = {}
+    for i, cid in enumerate(ids):
+        meta = metas[i] if metas else {}
+        chunk_data[cid] = {
+            'text':     docs[i],
+            'path':     meta.get('path', ''),
+            'tier':     meta.get('tier', 'D'),
+            'vec_dist': dists[i]
+        }
+
+    vec_ranked = list(ids)  # already sorted by ChromaDB distance (ascending = closest)
+    query_terms = query_exp.split()
+    tf_scores   = {cid: tf_score(chunk_data[cid]['text'], query_terms) for cid in ids}
+    tf_ranked   = sorted(ids, key=lambda cid: -tf_scores[cid])
+
+    if args.debug:
+        print(f'Chunks fetched: {len(ids)} / {total_chunks} in collection', file=sys.stderr)
+        print(f'Top vec: {vec_ranked[0]} dist={chunk_data[vec_ranked[0]]["vec_dist"]:.4f}', file=sys.stderr)
+        print(f'Top TF:  {tf_ranked[0]}  tf={tf_scores[tf_ranked[0]]:.2f}', file=sys.stderr)
+
+    ranked, scores = rrf_merge(vec_ranked, tf_ranked, chunk_data, query_text=query_orig)
+
+    if args.json:
+        print(build_json_output(ranked, scores, chunk_data, args.top, query_orig, query_exp, aliases_used))
+    else:
+        if aliases_used:
+            print(f'Aliases expanded: {", ".join(aliases_used[:10])}{"..." if len(aliases_used)>10 else ""}')
+            print()
+        print_terminal(ranked, scores, chunk_data, args.top)
+        print(f'\n{min(args.top, len(ranked))} of {len(ranked)} passages shown '
+              f'(collection: {total_chunks} chunks)')
+
+if __name__ == '__main__':
+    main()
