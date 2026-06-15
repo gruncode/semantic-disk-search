@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dsearch2 — Experiment Results (June 2026)</title>
+<style>
+:root { --bg: #1e1e2e; --surface: #252536; --border: #3a3a50; --text: #cdd6f4;
+        --dim: #a0a0b8; --green: #a6e3a1; --red: #f38ba8; --yellow: #f9e2af;
+        --blue: #89b4fa; --accent: #cba6f7; --teal: #94e2d5; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text);
+       line-height: 1.6; max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+h1 { color: var(--accent); margin-bottom: 0.3rem; font-size: 1.6rem; }
+h2 { color: var(--blue); margin: 2rem 0 0.8rem; font-size: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+h3 { color: var(--teal); margin: 1.2rem 0 0.5rem; font-size: 1.05rem; }
+p, li { color: var(--text); margin-bottom: 0.4rem; }
+.subtitle { color: var(--dim); font-size: 0.95rem; margin-bottom: 1.5rem; }
+table { width: 100%; border-collapse: collapse; margin: 0.8rem 0 1.2rem; font-size: 0.9rem; }
+th { background: var(--surface); color: var(--accent); padding: 0.5rem 0.8rem; text-align: left;
+     border-bottom: 2px solid var(--border); }
+td { padding: 0.45rem 0.8rem; border-bottom: 1px solid var(--border); }
+tr:hover td { background: rgba(137, 180, 250, 0.06); }
+.hit { color: var(--green); font-weight: 600; }
+.miss { color: var(--red); }
+.warn { color: var(--yellow); }
+.dim { color: var(--dim); }
+.num { font-family: 'Consolas', monospace; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+        padding: 1rem 1.2rem; margin: 1rem 0; }
+.card-title { color: var(--accent); font-weight: 600; margin-bottom: 0.5rem; }
+.verdict { display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: 600; font-size: 0.85rem; }
+.verdict-dead { background: rgba(243, 139, 168, 0.15); color: var(--red); }
+.verdict-live { background: rgba(166, 227, 161, 0.15); color: var(--green); }
+.verdict-minor { background: rgba(249, 226, 175, 0.15); color: var(--yellow); }
+.summary-box { background: linear-gradient(135deg, rgba(203,166,247,0.08), rgba(137,180,250,0.08));
+               border: 1px solid var(--accent); border-radius: 10px; padding: 1.2rem 1.5rem; margin: 1.5rem 0; }
+.summary-box h3 { color: var(--accent); margin-top: 0; }
+.bar { height: 22px; border-radius: 4px; display: flex; overflow: hidden; margin: 0.3rem 0; }
+.bar-fill { height: 100%; display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: 600; color: #1e1e2e; }
+.bar-hit { background: var(--green); }
+.bar-miss { background: var(--red); }
+.bar-rescue { background: var(--blue); }
+ul { padding-left: 1.5rem; }
+a { color: var(--blue); }
+</style>
+</head>
+<body>
+
+<h1>dsearch2 Experiment Results</h1>
+<p class="subtitle">950K chunks &middot; 128K files &middot; Cohere embed-multilingual-v3.0 &middot; 105-query eval set &middot; June 2026</p>
+
+<div class="summary-box">
+<h3>Current Performance</h3>
+<table>
+<tr><th>Pipeline</th><th>Hits / 105</th><th>Recall@20</th><th>Note</th></tr>
+<tr><td>v7.1c benchmark (raw queries)</td><td class="num">73</td><td class="num">69.5%</td><td class="dim">No alias expansion</td></tr>
+<tr><td><strong>v7.1c production (with aliases + Recoll)</strong></td><td class="num hit">75</td><td class="num hit">71.4%</td><td>Actual production performance</td></tr>
+<tr><td>Projected: + BGE-M3 dual-embed</td><td class="num" style="color:var(--blue)">~83&ndash;85</td><td class="num" style="color:var(--blue)">~79&ndash;81%</td><td class="dim">Pending GPU re-embed ($0.50&ndash;1.00)</td></tr>
+</table>
+<div class="bar" style="width:100%">
+  <div class="bar-fill bar-hit" style="width:71.4%" title="Production hits">75 hits (71.4%)</div>
+  <div class="bar-fill bar-rescue" style="width:9.5%" title="BGE-M3 projected">~10 BGE</div>
+  <div class="bar-fill bar-miss" style="width:19.1%" title="Remaining misses">~20 miss</div>
+</div>
+</div>
+
+<!-- ═══ EXPERIMENT 1: WEIGHT TUNING ═══ -->
+<h2>1. RRF Weight Tuning (v5 &rarr; v7.1c)</h2>
+<p>Iterative grid search over 4-way RRF weights. Each version tested on the full 105-query eval set.</p>
+<table>
+<tr><th>Version</th><th>W_VEC</th><th>W_TF</th><th>W_RECOLL_PATH</th><th>W_RECOLL_CONTENT</th><th>Recall@20</th><th>&Delta;</th></tr>
+<tr><td>v5</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">48.6%</td><td></td></tr>
+<tr><td>v6</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">0.0</td><td class="num">61.0%</td><td class="hit">+12.4</td></tr>
+<tr><td>v7</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">1.5</td><td class="num">0.0</td><td class="num">66.7%</td><td class="hit">+5.7</td></tr>
+<tr><td>v7.1a</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">1.5</td><td class="num">0.5</td><td class="num">67.6%</td><td class="hit">+0.9</td></tr>
+<tr><td><strong>v7.1c</strong></td><td class="num">1.0</td><td class="num">1.0</td><td class="num">1.5</td><td class="num">0.0</td><td class="num hit">69.5%</td><td class="hit">+1.9</td></tr>
+</table>
+<p><strong>Finding:</strong> Recoll path matching (filename/directory) is the largest Recall driver after vector similarity. Content BM25 adds noise — disabled in v7.1c.</p>
+
+<!-- ═══ EXPERIMENT 2: RESIDUAL ANALYSIS ═══ -->
+<h2>2. Residual Miss Analysis (32 misses)</h2>
+<p>Categorized why each of the 32 misses fails:</p>
+<table>
+<tr><th>Category</th><th>Count</th><th>%</th><th>Description</th></tr>
+<tr><td>Embedding gap</td><td class="num">10</td><td class="num">31%</td><td>Cohere lacks domain alignment for niche topics</td></tr>
+<tr><td>RRF displacement</td><td class="num">5</td><td class="num">16%</td><td>High-frequency docs crowd out correct targets</td></tr>
+<tr><td>OCR/extraction failure</td><td class="num">4</td><td class="num">13%</td><td>Source text garbled or missing</td></tr>
+<tr><td>Ambiguous query</td><td class="num">4</td><td class="num">13%</td><td>Multiple valid documents match the query</td></tr>
+<tr><td>Other</td><td class="num">9</td><td class="num">27%</td><td>Chunk boundary, missing aliases, etc.</td></tr>
+</table>
+
+<!-- ═══ EXPERIMENT 3: BGE-M3 PILOT ═══ -->
+<h2>3. BGE-M3 A/B Pilot (32 misses)</h2>
+<p>Head-to-head: Cohere embed-multilingual-v3.0 vs BAAI/bge-m3 (1024-dim, dense mode) on the 32 residual misses. Same 50-doc pool, top-20 evaluation.</p>
+<table>
+<tr><th>Outcome</th><th>Count</th><th>%</th></tr>
+<tr><td class="hit">BGE-M3 rescues (Cohere miss &rarr; BGE hit)</td><td class="num hit">10</td><td class="num hit">31%</td></tr>
+<tr><td>Cohere rescues (BGE miss &rarr; Cohere hit)</td><td class="num">0</td><td class="num">0%</td></tr>
+<tr><td>Both hit</td><td class="num">2</td><td class="num">6%</td></tr>
+<tr><td class="miss">Both miss</td><td class="num">20</td><td class="num">63%</td></tr>
+</table>
+<p><span class="verdict verdict-live">VIABLE</span> Projected +10 hits &rarr; Recall@20 ~79&ndash;81%</p>
+
+<!-- ═══ EXPERIMENT 4: BGE-M3 REGRESSION ═══ -->
+<h2>4. BGE-M3 Regression Test (73 current hits)</h2>
+<p>Would BGE-M3 break queries that Cohere already handles? Tested 73 current hits.</p>
+<table>
+<tr><th>Outcome</th><th>Count</th><th>%</th></tr>
+<tr><td>Both hit (top-20)</td><td class="num">43</td><td class="num">58.9%</td></tr>
+<tr><td>BGE-M3 bonus (Cohere miss, BGE hit)</td><td class="num">19</td><td class="num">26.0%</td></tr>
+<tr><td>Both miss in pool</td><td class="num">6</td><td class="num">8.2%</td></tr>
+<tr><td class="miss"><strong>Regression</strong> (Cohere hit, BGE drops out)</td><td class="num warn">5</td><td class="num warn">6.8%</td></tr>
+</table>
+<p><strong>The 5 regressions:</strong></p>
+<table>
+<tr><th>#</th><th>Query</th><th>Cohere</th><th>BGE</th></tr>
+<tr><td>1</td><td>PHP ordering system presentation</td><td class="num hit">4</td><td class="num miss">23</td></tr>
+<tr><td>2</td><td>Fisheye camera datasheet</td><td class="num hit">5</td><td class="num miss">21</td></tr>
+<tr><td>3</td><td>Lawn care tips</td><td class="num hit">12</td><td class="num miss">30</td></tr>
+<tr><td>4</td><td>WDM optical network design</td><td class="num hit">1</td><td class="num miss">30</td></tr>
+<tr><td>5</td><td>Optical burst switching</td><td class="num hit">1</td><td class="num miss">21</td></tr>
+</table>
+<p><strong>Conclusion:</strong> 6.8% regression kills swap strategy. BGE-M3 is complementary, not a replacement.</p>
+
+<!-- ═══ EXPERIMENT 5: RERANKER ═══ -->
+<h2>5. Cross-Encoder Reranker Eval</h2>
+<p>bge-reranker-v2-m3 over Cohere top-100 candidates on the 32 misses.</p>
+<table>
+<tr><th>Outcome</th><th>Count</th><th>%</th></tr>
+<tr><td class="miss">NOT_IN_POOL (target not in top-100)</td><td class="num miss">25</td><td class="num miss">78%</td></tr>
+<tr><td class="hit">RESCUE (reranker pushes to top-20)</td><td class="num">2</td><td class="num">6%</td></tr>
+<tr><td>STILL_MISS (in pool, reranker fails)</td><td class="num">3</td><td class="num">9%</td></tr>
+<tr><td>ALREADY_HIT (Cohere already top-20)</td><td class="num">2</td><td class="num">6%</td></tr>
+</table>
+<p><span class="verdict verdict-dead">DEAD</span> 78% of targets not even in the candidate pool. Reranker can only reorder &mdash; it cannot retrieve. Bottleneck is coverage, not ranking.</p>
+
+<div class="card">
+<div class="card-title">Reranker harmed 2 queries</div>
+<ul>
+<li>Packet Tracer routing notes: rank 24 &rarr; 89 (score 0.061) &mdash; dropped 65 places</li>
+<li>DERIGNY RTU alarms: rank 59 &rarr; 76 &mdash; dropped 17 places</li>
+</ul>
+<p class="dim">Cross-encoder mis-scores Greek technical text and short OCR content.</p>
+</div>
+
+<!-- ═══ EXPERIMENT 6: RECOLL BM25 ═══ -->
+<h2>6. Recoll Content BM25 as Retrieval Arm</h2>
+<p>Tested whether Recoll's full-text BM25 index finds the 32 miss targets, especially the 13 NOT_IN_COHERE targets.</p>
+<table>
+<tr><th>Metric</th><th>Count</th></tr>
+<tr><td>Total misses tested</td><td class="num">32</td></tr>
+<tr><td>Recoll finds target</td><td class="num">2 <span class="dim">(both already in Cohere pool)</span></td></tr>
+<tr><td class="miss">Recoll finds among NOT_IN_COHERE</td><td class="num miss">0</td></tr>
+</table>
+<p><span class="verdict verdict-dead">DEAD</span> Recoll index doesn't cover scanned PDFs, OCR sidecars, or image-derived content.</p>
+
+<!-- ═══ EXPERIMENT 7: PRODUCTION RETEST ═══ -->
+<h2>7. Production Pipeline Re-test (Alias Expansion)</h2>
+<p>Re-tested all 32 misses through the full production dsearch2 CLI (alias expansion + Recoll path + 4-way RRF). The BGE pilot and benchmark used raw queries without alias expansion.</p>
+<table>
+<tr><th>Outcome</th><th>Count</th><th>Detail</th></tr>
+<tr><td class="hit">RESCUE (false miss in pilot)</td><td class="num hit">2</td><td></td></tr>
+<tr><td>STILL_MISS</td><td class="num">30</td><td></td></tr>
+</table>
+<p>The 2 rescued queries:</p>
+<ul>
+<li><strong>κτηματολόγιο Μοχλός Μικρό πώληση</strong> &rarr; rank 5 (alias &ldquo;cadastre&rdquo; + &ldquo;land registry&rdquo; bridged the gap)</li>
+<li><strong>GSPS πανωραμική viewer βοήθεια</strong> &rarr; rank 20 (Recoll path match)</li>
+</ul>
+<p><span class="verdict verdict-minor">METHODOLOGY FIX</span> True production misses = 30, not 32. Production Recall@20 = <strong>75/105 = 71.4%</strong>.</p>
+
+<!-- ═══ ARCHITECTURE DECISION ═══ -->
+<h2>Architecture Decision: Dual-Embed</h2>
+
+<div class="card">
+<div class="card-title">Decision: Add BGE-M3 as 5th RRF arm (do NOT swap Cohere)</div>
+<ul>
+<li>BGE-M3 must be a <strong>retrieval arm</strong> (own ANN query &rarr; own candidates), not a reranker over Cohere's pool</li>
+<li>The value is in the <strong>union of candidate pools</strong>: Cohere-top-N &cup; BGE-top-N &cup; Recoll</li>
+<li>Separate ChromaDB collection (<code>fulldisk-1k-bge-m3</code>) with identical chunk IDs</li>
+<li>W_BGE start at 0.5&ndash;0.75, grid search with regression-aware objective</li>
+<li>Target: 83&ndash;85/105 = 79&ndash;81% Recall@20</li>
+<li>Cost: ~$0.50&ndash;1.00 GCP T4 spot for GPU re-embedding</li>
+</ul>
+</div>
+
+<h3>Experiment-by-experiment approach verdicts</h3>
+<table>
+<tr><th>Approach</th><th>Rescues</th><th>Verdict</th><th>Why</th></tr>
+<tr><td>Cross-encoder reranker</td><td class="num">2/32</td><td><span class="verdict verdict-dead">DEAD</span></td><td>78% not in pool &mdash; ranking is not the bottleneck</td></tr>
+<tr><td>Recoll content BM25</td><td class="num">0/13 new</td><td><span class="verdict verdict-dead">DEAD</span></td><td>Recoll index missing OCR/scanned content</td></tr>
+<tr><td>Alias expansion</td><td class="num">2/32</td><td><span class="verdict verdict-minor">MINOR</span></td><td>Helps niche queries; already in production</td></tr>
+<tr><td><strong>BGE-M3 dual-embed</strong></td><td class="num hit">10/32</td><td><span class="verdict verdict-live">VIABLE</span></td><td>Only approach that fixes coverage gap</td></tr>
+</table>
+
+<h3>Comparison with other systems</h3>
+<table>
+<tr><th>System</th><th>Scale</th><th>Recall@K</th><th>Method</th></tr>
+<tr style="background:rgba(166,227,161,0.08)"><td><strong>dsearch2 v7.1c</strong></td><td><strong>950K chunks, 128K files</strong></td><td class="num hit"><strong>71.4% R@20</strong></td><td><strong>4-way RRF + aliases</strong></td></tr>
+<tr><td>MKQA cross-lingual</td><td>Wikipedia passages</td><td class="num">67.8% R@20</td><td>Hybrid BM25+dense</td></tr>
+<tr><td>PrivateGPT</td><td>~10K pages</td><td class="dim">Unpublished</td><td>RAG + local LLM</td></tr>
+<tr><td>AnythingLLM</td><td>~10K pages</td><td class="dim">Unpublished</td><td>RAG + vectorDB</td></tr>
+<tr><td>Khoj</td><td>~10K pages</td><td class="dim">Unpublished</td><td>RAG + hybrid search</td></tr>
+</table>
+
+<p style="margin-top:2rem; color:var(--dim); font-size:0.85rem; border-top:1px solid var(--border); padding-top:1rem;">
+Generated 2026-06-15. Eval set: 105 queries across personal documents, teaching materials, technical manuals, legal filings, and system audits.
+All experiments ran on CPU (i7-8700) with Cohere API for embedding. BGE-M3 via sentence-transformers (dense mode, 1024-dim).
+</p>
+
+</body>
+</html>
