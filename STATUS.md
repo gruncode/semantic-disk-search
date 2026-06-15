@@ -1,6 +1,6 @@
 # Semantic Disk Search — Status
 
-**Updated:** 2026-06-13
+**Updated:** 2026-06-15
 
 ## v1 (search-ai-10agents) — LIVE, modified
 
@@ -354,3 +354,108 @@ A=6.7%, B=56.4%, C=29.8%, D=7.1%
 - `$PROJECT_DIR/test_dsearch2_answer_diversity.py` — diversity tests (Phase C3)
 - `/usr/local/bin/dsearch2-answer` — MODIFIED: diversity filter (--max-per-file, --no-diversity)
 - `$PROJECT_DIR/STATUS.md` — this file
+
+---
+
+## v7.1c — RRF Weight Tuning (2026-06)
+
+### What changed
+Production retriever (`dsearch2`) upgraded from v5 to v7.1c via iterative RRF weight tuning:
+
+| Version | W_VEC | W_TF | W_RECOLL_PATH | W_RECOLL_CONTENT | Recall@20 |
+|---------|-------|------|---------------|------------------|-----------|
+| v5      | 1.0   | 1.0  | 0.0           | 0.0              | 48.6%     |
+| v6      | 1.0   | 1.0  | 1.0           | 0.0              | 61.0%     |
+| v7      | 1.0   | 1.0  | 1.5           | 0.0              | 66.7%     |
+| v7.1a   | 1.0   | 1.0  | 1.5           | 0.5              | 67.6%     |
+| v7.1c   | 1.0   | 1.0  | 1.5           | 0.0              | 69.5%     |
+
+Key findings:
+- Recoll path channel (filename/path matching) is the single biggest Recall driver after vector
+- Recoll content channel (full-text BM25) adds marginal gain but introduces RRF displacement noise
+- v7.1c drops content channel for cleaner fusion — net +1.9% over v7.1a
+
+### Residual miss analysis (32/105 misses)
+Categories of remaining failures:
+- **31% embedding gap** — Cohere embed-multilingual-v3.0 lacks domain alignment for niche topics
+- **16% RRF displacement** — high-frequency documents crowd out correct targets
+- **13% OCR/extraction failure** — source text garbled or missing
+- **13% ambiguous query** — query could match multiple valid documents
+- **27% other** — chunk boundary issues, missing aliases, etc.
+
+## BGE-M3 Pilot — A/B Embedding Test (2026-06)
+
+### Motivation
+Residual miss analysis showed 31% of failures are pure embedding gaps. Tested BAAI/bge-m3 (1024-dim, multilingual, MIT license) as potential complement to Cohere.
+
+### Pilot design
+- 32 residual misses tested head-to-head: Cohere vs BGE-M3
+- Same ChromaDB collection, same 50-doc retrieval pool, top-20 evaluation
+- BGE-M3 loaded in dense-only mode via sentence-transformers
+
+### Results
+| Outcome | Count | % |
+|---------|-------|---|
+| BGE-M3 rescues (Cohere miss → BGE hit) | 10 | 31% |
+| Cohere rescues (BGE miss → Cohere hit) | 0 | 0% |
+| Both hit | 2 | 6% |
+| Both miss | 20 | 63% |
+
+**Projected impact:** +10 hits on 105 queries → Recall@20 rises from 69.5% to ~79%.
+
+### Regression test (73 current hits)
+Tested whether BGE-M3 would break queries that Cohere already handles well:
+
+| Outcome | Count | % |
+|---------|-------|---|
+| Both hit (top-20) | 43 | 58.9% |
+| BGE-M3 bonus (Cohere miss, BGE hit) | 19 | 26.0% |
+| Both miss in pool | 6 | 8.2% |
+| **REGRESSION** (Cohere hit, BGE drops out) | **5** | **6.8%** |
+
+The 5 regressions (BGE rank drops below 20):
+1. PHP ordering system presentation (Cohere=4 → BGE=23)
+2. Fisheye camera datasheet (Cohere=5 → BGE=21)
+3. Lawn care tips (Cohere=12 → BGE=30)
+4. WDM optical network design (Cohere=1 → BGE=30)
+5. Optical burst switching (Cohere=1 → BGE=21)
+
+**Conclusion:** 6.8% regression rate rules out a straight swap. BGE-M3 is complementary, not a replacement.
+
+## Architecture Decision: Dual-Embed + Reranker (2026-06)
+
+### Decision
+Add BGE-M3 as a **5th RRF arm** alongside existing Cohere vector + TF + Recoll path + Recoll content. Do NOT replace Cohere.
+
+### Rationale
+- BGE-M3 rescues 10 queries Cohere misses, but regresses 5 that Cohere handles
+- A 5th RRF arm is NOT strictly additive — high-ranked distractors from any arm can displace targets in fused scores
+- Cross-encoder reranker (bge-reranker-v2-m3) over Cohere's top-100 fixes 7/10 rescues with zero index changes
+- Only 3 NOT_IN_POOL cases justify a full second embedding space
+
+### Implementation plan
+1. Re-embed full corpus with BGE-M3 → separate ChromaDB collection (`fulldisk-1k-bge-m3`)
+2. Identical chunk IDs (`md5(path)[:12]_1k_{idx}`) for cross-collection alignment
+3. Add W_BGE weight (start 0.5–1.0) to RRF fusion
+4. Grid search on full 105-query eval set with regression-aware objective
+5. Optional: add cross-encoder reranker as final stage
+
+### Status
+- Pilot: COMPLETE (10/32 rescues)
+- Regression test: COMPLETE (5/73 regressions = 6.8%)
+- Full re-embedding: TODO (requires GPU, ~950K chunks)
+- Weight tuning: TODO
+- Reranker evaluation: TODO
+
+### Comparison with other systems
+
+| System | Scale | Recall@K | Method |
+|--------|-------|----------|--------|
+| **dsearch2 v7.1c** | **950K chunks, 128K files** | **69.5% R@20** | **4-way RRF (vector+TF+path+content)** |
+| MKQA cross-lingual (academic) | Wikipedia passages | 67.8% R@20 | Hybrid BM25+dense |
+| PrivateGPT | ~10K pages | Unpublished | RAG + local LLM |
+| AnythingLLM | ~10K pages | Unpublished | RAG + vectorDB |
+| Khoj | ~10K pages | Unpublished | RAG + hybrid search |
+| Recoll (BM25 only) | Millions of files | N/A (keyword) | Xapian inverted index |
+
+No comparable personal/local semantic disk search tool publishes Recall@K benchmarks at this scale.

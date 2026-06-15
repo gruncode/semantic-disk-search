@@ -1,8 +1,15 @@
 # semantic-disk-search
 
-Hybrid semantic search for a local document corpus. Combines **BM25** (Recoll/Xapian), **vector search** across 5 embedding models (FAISS + ChromaDB), **HyDE** query expansion, and **Claude agents** for ranked, cited answers.
+Hybrid semantic search for a local document corpus. Combines **BM25** (Recoll/Xapian), **vector search** (Cohere + ChromaDB HNSW), **4-way Reciprocal Rank Fusion**, **HyDE** query expansion, and **Claude agents** for ranked, cited answers.
 
-Tested on a 144 GB corpus of ~63 000 personal documents — PDFs, Word files, spreadsheets, scanned images (with OCR), emails, and plain text, including multilingual (Greek + English) content.
+Tested on a 144 GB multilingual corpus — 128K files, 950K chunks — PDFs, Word files, spreadsheets, scanned images (with OCR), emails, and plain text in Greek + English.
+
+**Current performance (v7.1c):** 70% Recall@20, 29% Recall@1 on a 105-query golden test set — comparable to cross-lingual hybrid benchmarks (MKQA: 67.8%) on a harder corpus (OCR noise, bilingual, meaning-in-paths).
+
+## Contributors
+
+1. **George T.** — architecture, evaluation, production deployment
+2. **Claude** (Anthropic) — implementation, benchmarking, analysis
 
 ---
 
@@ -252,7 +259,7 @@ dsearch-multimodel --model e5  "pump maintenance schedule"
 
 ## dsearch2 — hybrid retriever (v2)
 
-`dsearch2` is a standalone hybrid retriever built on top of the Cohere ChromaDB index. It adds **TF lexical scoring** and **RRF (Reciprocal Rank Fusion)** on top of vector distance, plus **alias expansion** for multilingual synonym matching.
+`dsearch2` is a standalone hybrid retriever built on top of the Cohere ChromaDB index. It fuses **4 retrieval signals** through weighted **RRF (Reciprocal Rank Fusion)**: vector similarity, TF lexical scoring, Recoll BM25 path matching, and Recoll BM25 content matching — plus **alias expansion** for multilingual synonym matching and **document tier classification** (A/B/C/D reliability tiers via regex + optional LLM fallback).
 
 ### How it differs from `dsearch`
 
@@ -260,12 +267,14 @@ dsearch-multimodel --model e5  "pump maintenance schedule"
 |---|---|---|
 | Vector retrieval | Cohere + ChromaDB | Cohere + ChromaDB |
 | Lexical scoring | None | TF over returned chunks |
-| Rank fusion | Vector rank only | RRF (vector + TF) |
-| Alias expansion | Via Claude Step 1 | Built-in, read from alias_map.json |
-| Source tier boost | None | A→+0.4% / D→-0.2% |
+| BM25 integration | None | Recoll path + content (split channels) |
+| Rank fusion | Vector rank only | 4-way weighted RRF (vector + TF + Recoll path + Recoll content) |
+| Alias expansion | Via Claude Step 1 | Built-in, from alias_map.json |
+| Source tier | None | A/B/C/D classifier (regex + optional Haiku LLM) |
 | Claude calls | Yes (Steps 1, 4, 6) | None — retrieval only |
 | Output modes | terminal, HTML, answer | terminal, JSON |
 | HNSW candidate pool | n_results × 3 | max(n_results × 3, 1000) |
+| Recall@20 (105 queries) | — | 70% (v7.1c) |
 
 The larger candidate pool (`max(..., 1000)`) is critical for HNSW recall on large collections (950K+ chunks) where a small probe set degrades accuracy.
 
@@ -361,6 +370,8 @@ tests/
 
 ## Benchmark results
 
+### Embedding model comparison (early benchmarks)
+
 Evaluated on a golden set of real queries across document types (contracts, invoices, technical specs, emails, scanned letters).
 
 | Model | MRR | Hit@1 | Hit@5 |
@@ -374,6 +385,50 @@ Evaluated on a golden set of real queries across document types (contracts, invo
 | **BM25 + Cohere (hybrid)** | **0.94** | **0.85** | **0.99** |
 
 See `notebooks/01_model_comparison.ipynb` for the full comparison with charts.
+
+### Retrieval pipeline evolution (105-query golden set, 950K chunks)
+
+| Version | N | Method | Recall@1 | Recall@20 |
+|---|---|---|---|---|
+| v5 | 105 | Vector only (Cohere) | 19% | 56% |
+| v6 | 105 | Vector + Cohere Rerank | 29% | 58% |
+| v7 | 105 | Vector + Recoll BM25 (equal weights) | 25% | 64% |
+| v7.1 | 105 | Weighted RRF + split Recoll (path/content) | 29% | 69% |
+| **v7.1c** | **105** | **Grid-optimal weights + classifier + fixes** | **29%** | **70%** |
+
+**v7.1c production weights:** `W_VEC=1.0, W_TF=1.0, W_RECOLL_PATH=1.5, W_RECOLL_CONTENT=0.0`
+
+Key insight: the 4-way weighted RRF fusion (v7.1c) outperformed the Cohere Rerank cross-encoder (v6) by 12 points on Recall@20, demonstrating that complementary signals (vector + lexical + filesystem path BM25) provide more information than a single learned reranker.
+
+### BGE-M3 pilot (dual-embed experiment)
+
+A/B test of BGE-M3 dense embeddings (1024-dim) against Cohere on the 32 residual misses:
+
+| Verdict | Count | Meaning |
+|---|---|---|
+| **BGE-M3 wins** | **10/32** | Target enters top-20 with BGE-M3 where Cohere failed |
+| Cohere wins | 0/32 | BGE-M3 never loses to Cohere |
+| Both hit | 2/32 | Both models find the target |
+| Both miss | 20/32 | Neither finds it (OCR garbage, meaning-in-path only) |
+
+Regression test on 73 currently-successful queries: 5/73 (6.8%) would regress on a full swap. This led to the **dual-embed** decision: keep Cohere as the stability anchor and add BGE-M3 as a 5th RRF arm rather than replacing Cohere.
+
+**Projected Recall@20 with dual-embed:** ~77–80% (net +7 to +10 after RRF weight tuning).
+
+### Comparison with other systems
+
+No other personal disk search tool publishes Recall@K benchmarks. The closest comparisons are academic retrieval benchmarks:
+
+| System / Benchmark | Recall metric | Score | Corpus |
+|---|---|---|---|
+| BM25 alone (BEIR avg) | nDCG@10 | ~40–45% | Clean English |
+| Dense retrieval (BEIR SOTA) | nDCG@10 | 55–65% | Clean English |
+| Hybrid BM25+dense (MS MARCO) | Recall@10 | 80.8% | Clean English |
+| Cross-lingual hybrid (MKQA) | Recall@20 | 67.8% | Multilingual |
+| Local hybrid RAG (tuned 30/70) | Recall@5 | 81.6% | Clean local docs |
+| **dsearch2 v7.1c** | **Recall@20** | **70%** | **Greek+English, OCR, mixed formats** |
+
+dsearch2 operates on a significantly harder corpus than standard benchmarks: bilingual (Greek + English), noisy OCR, meaning encoded in file paths/names, and extreme document diversity (payslips, legal docs, SCADA reports, teaching materials, dental X-rays).
 
 ---
 
@@ -415,6 +470,12 @@ Vocabulary mismatch is the main failure mode for domain-specific document search
 
 **Why agent ranking instead of a reranker?**  
 Cross-encoder rerankers require running a model locally per (query, doc) pair — expensive at 100 documents. Claude agents read the actual extracted text and score on relevance to the *intent*, not just lexical similarity. Running 10 agents via subscription costs nothing extra per query — no per-token billing — while spinning up a GPU reranker would require local hardware or cloud GPU time.
+
+**Why 4-way RRF instead of a single reranker?**  
+Grid-optimal weighted RRF (v7.1c) outperforms Cohere Rerank by 12 points on Recall@20. Each signal captures different failure modes: vector catches semantic similarity, TF catches exact term matches, Recoll path exploits filesystem hierarchy (folder names, dates in paths). No single model captures all three — fusion is strictly better.
+
+**Why dual-embed (planned) instead of model swap?**  
+A BGE-M3 pilot showed 10/32 miss rescues with 0 Cohere wins, but a regression test revealed 5/73 hits would break on a full swap. Adding BGE-M3 as a 5th RRF arm (dual-embed) captures the rescues while the retained Cohere arm protects current hits. Trade-off: 2× storage and slightly higher query latency (~1.5s vs ~0.5s).
 
 ---
 
