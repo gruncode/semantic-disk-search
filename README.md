@@ -4,6 +4,17 @@ Hybrid semantic search for a local document corpus. Combines **BM25** (Recoll/Xa
 
 Tested on a 144 GB multilingual corpus — 128K files, 950K chunks — PDFs, Word files, spreadsheets, scanned images (with OCR), emails, and plain text in Greek + English.
 
+Each document is assigned an **authority tier** at index time so the answer pipeline can weigh official sources over personal notes:
+
+| Tier | Meaning | Examples |
+|------|---------|---------|
+| **A** | Official / institutional | Government decisions, court filings, notarial deeds, engineer reports |
+| **B** | Formal / semi-official | Manuals, bank statements, insurance policies, payslips |
+| **C** | Personal / unverified | Personal notes, neighbour emails, draft letters, homework |
+| **D** | Noise / low-signal | Garbled OCR, code dumps, config files, auto-generated logs |
+
+Classification uses a **precedence-based regex classifier** (filename signals, content markers, folder path rules). Files that pattern-match ambiguously fall back to a **Haiku LLM call** (optional, cached) — 88% of D-tier files were reclassified on a full-corpus pass. Tier flows into RRF as a small tiebreaker boost and into the final answer as citation labels (⚠ unconfirmed for C-tier).
+
 **Current performance (v7.1c):** 70% Recall@20, 29% Recall@1 on a 105-query golden test set — comparable to cross-lingual hybrid benchmarks (MKQA: 67.8%) on a harder corpus (OCR noise, bilingual, meaning-in-paths).
 
 ## What it does
