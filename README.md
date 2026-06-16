@@ -6,13 +6,6 @@ Tested on a 144 GB multilingual corpus — 128K files, 950K chunks — PDFs, Wor
 
 **Current performance (v7.1c):** 70% Recall@20, 29% Recall@1 on a 105-query golden test set — comparable to cross-lingual hybrid benchmarks (MKQA: 67.8%) on a harder corpus (OCR noise, bilingual, meaning-in-paths).
 
-## Contributors
-
-1. **George T.** — architecture, evaluation, production deployment
-2. **Claude** (Anthropic) — implementation, benchmarking, analysis
-
----
-
 ## What it does
 
 ```
