@@ -2,100 +2,103 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>semantic-disk-search — Architecture</title>
+<title>dsearch2 v7.2 — Pipeline Architecture</title>
 <style>
-:root {
-  --bg:#0e1626; --panel:#17223b; --ink:#e9eef7; --muted:#95a4c2; --line:#6b7a99;
-  --entry:#5db890; --claude-c:#8b78e6; --cohere-c:#e87c3e;
-  --extract-c:#4fc3d7; --store-c:#d4a827; --api-c:#e07a5f; --minor:#5a7090;
-}
-*{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--ink);
-     display:grid;grid-template-columns:290px 1fr 350px;height:100vh;overflow:hidden}
+:root { --bg:#0e1626; --panel:#17223b; --ink:#e9eef7; --muted:#95a4c2; --line:#6b7a99;
+        --active:#5db890; --disabled:#e06070; --optional:#f4d35e; --data:#6ea8fe; --accent:#b0a0e0; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:-apple-system,system-ui,sans-serif; background:var(--bg); color:var(--ink);
+       display:grid; grid-template-columns:300px 1fr 360px; height:100vh; overflow:hidden;
+       transition: grid-template-columns 0.15s ease; }
 
-/* overview panel */
-#overview{padding:14px;overflow-y:auto;background:rgba(11,18,32,.55);border-right:1px solid rgba(255,255,255,.06)}
-#overview h2{font-size:14px;margin:2px 0 8px}
-#overview p{font-size:12px;line-height:1.55;color:#cbd5e9;margin:6px 0}
-.ov-layer{font-size:11.5px;line-height:1.45;color:#cbd5e9;margin:6px 0;padding-left:9px;border-left:3px solid rgba(255,255,255,.14)}
-.ov-rule{font-size:11.5px;color:var(--muted);border-top:1px dashed rgba(255,255,255,.12);padding-top:8px;margin-top:10px}
-.ov-how{font-size:11px;color:var(--muted);font-style:italic;margin-top:10px}
-.chip{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+/* LEFT OVERVIEW */
+#overview { padding:14px; overflow-y:auto; border-right:1px solid rgba(255,255,255,.06); }
+#overview h2 { font-size:14px; margin:2px 0 8px; }
+#overview p { font-size:12px; line-height:1.5; color:#cbd5e9; margin:6px 0; }
+#overview .ov-layer { font-size:11.5px; line-height:1.4; color:#cbd5e9; margin:7px 0; padding-left:9px; border-left:3px solid rgba(255,255,255,.14); }
+#overview .ov-rule { font-size:11.5px; color:var(--muted); border-top:1px dashed rgba(255,255,255,.12); padding-top:8px; margin-top:10px; }
+#overview .ov-how { font-size:11px; color:var(--muted); font-style:italic; margin-top:10px; }
+.ov-active { border-left-color:var(--active) !important; }
+.ov-disabled { border-left-color:var(--disabled) !important; }
+.ov-optional { border-left-color:var(--optional) !important; }
+.ov-data { border-left-color:var(--data) !important; }
+.ov-metric { font-family:'Consolas',monospace; font-weight:600; }
 
-/* center */
-#left{padding:10px 14px;overflow:hidden;display:flex;flex-direction:column}
-#left h1{font-size:15px;margin:0 0 3px;font-weight:700}
-.sub{font-size:11px;color:var(--muted);margin-bottom:5px}
-.toolbar{display:flex;gap:6px;align-items:center;margin-bottom:7px;flex-wrap:wrap}
-.btn{background:rgba(255,255,255,.06);color:var(--ink);border:1px solid rgba(255,255,255,.10);
-     border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px}
-.btn:hover{background:rgba(255,255,255,.10)}
-#saved-ind{color:#5db890;font-size:11px;font-weight:600;transition:opacity .3s}
-#wrap{flex:1;overflow:auto;cursor:grab;border-radius:10px;background:rgba(23,34,59,.6)}
-svg{display:block;user-select:none}
-footer{font-size:10px;color:var(--muted);margin-top:5px}
+/* CENTER CANVAS */
+#left { padding:12px 16px; overflow:hidden; display:flex; flex-direction:column; }
+#left h1 { font-size:18px; margin:0 0 2px; color:var(--accent); }
+.sub { font-size:11px; color:var(--muted); margin-bottom:6px; }
+.toolbar { display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+.btn { background:rgba(255,255,255,.06); color:var(--ink); border:1px solid rgba(255,255,255,.10);
+       border-radius:6px; padding:4px 10px; cursor:pointer; font-size:11px; }
+.btn:hover { background:rgba(255,255,255,.10); }
+#saved-ind { color:#5db890; font-size:11px; font-weight:600; transition:opacity .3s; }
+#toolbar-hint { color:var(--muted); font-size:10px; }
+#wrap { flex:1; overflow:auto; cursor:grab; border-radius:10px; background:rgba(23,34,59,.6); }
+svg { display:block; user-select:none; width:100%; height:100%; }
 
-/* nodes */
-g.node{cursor:move}
-g.node rect.nb{transition:stroke .15s ease}
-g.node:hover rect.nb{stroke:#ffffff!important;stroke-width:2!important}
+/* NODES */
+g.node { cursor:move; }
+g.node rect.nb { transition:stroke .15s ease; }
+g.node:hover rect.nb { stroke:#ffffff; stroke-width:1.8; }
+text { user-select:none; pointer-events:none; }
+.nt { font-weight:600; fill:var(--ink); font-size:13px; }
+.ns { fill:var(--muted); font-size:11px; font-family:ui-monospace,monospace; }
+.nt-dim { font-weight:600; fill:var(--muted); font-size:13px; }
 
-/* arrows */
-g.arrow path{fill:none;stroke:var(--line);stroke-width:1.8;cursor:pointer}
-g.arrow:hover path{stroke:#fff}
-g.arrow.dashed path{stroke-dasharray:6 4}
-g.arrow.loop path{stroke:rgba(139,120,230,.65);stroke-dasharray:5 3}
-g.arrow.service path{stroke:rgba(107,122,153,.45);stroke-dasharray:4 3}
-g.arrow path.hit-path{stroke:transparent!important;stroke-width:14!important;
-                       stroke-dasharray:none!important;fill:none!important;
-                       pointer-events:stroke;cursor:pointer}
+/* ARROWS */
+g.arrow path { fill:none; stroke:var(--line); stroke-width:1.8; cursor:pointer; }
+g.arrow:hover path { stroke:#fff; }
+g.arrow path.hit-path { stroke:transparent !important; stroke-width:14 !important;
+                        stroke-dasharray:none !important; fill:none !important;
+                        pointer-events:stroke; cursor:pointer; }
+g.arrow.active path { stroke:var(--active); stroke-width:2; }
+g.arrow.disabled path { stroke:rgba(224,96,112,.4); stroke-dasharray:6 4; stroke-width:1.4; }
+g.arrow.optional path { stroke:rgba(244,211,94,.5); stroke-dasharray:8 4; stroke-width:1.4; }
+g.arrow.datafeed path { stroke:rgba(110,168,254,.35); stroke-dasharray:4 3; stroke-width:1.2; }
 
-/* labels */
-g.label{cursor:move}
-g.label text{fill:var(--muted);font-size:10.5px}
-g.label.strong text{fill:#e8c547;font-size:11px;font-weight:600}
+/* LABELS */
+g.label { cursor:move; }
+g.label text { fill:var(--muted); font-size:10.5px; }
+g.label.strong text { fill:var(--active); font-weight:600; }
+g.label.warn text { fill:var(--disabled); }
 
-/* selection */
-.sel rect.nb{stroke:#f4d35e!important;stroke-width:2.4!important}
-g.arrow.sel path{stroke:#f4d35e!important}
+/* SELECTION */
+.sel rect.nb { stroke:#f4d35e !important; stroke-width:2.4 !important; }
+g.arrow.sel path { stroke:#f4d35e !important; }
 
-text{user-select:none;pointer-events:none}
-.nt{font-weight:700;fill:var(--ink);font-size:13px}
-.ns{fill:var(--muted);font-size:10.5px;font-family:ui-monospace,monospace}
-.ni{fill:var(--muted);font-size:10px;font-style:italic}
-
-/* right panel */
-#right{padding:14px 16px;overflow-y:auto;background:rgba(11,18,32,.55);border-left:1px solid rgba(255,255,255,.06)}
-#right h2{margin:4px 0 6px;font-size:14px}
-.key{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-top:8px}
-#right p{margin:4px 0;font-size:13px;line-height:1.45;color:#cbd5e9}
-#right table{width:100%;font-size:12px;border-collapse:collapse;margin-top:6px}
-#right td{padding:3px 4px;border-bottom:1px dashed rgba(255,255,255,.07);vertical-align:top}
-#right td:first-child{color:var(--muted);width:36%;font-family:ui-monospace,monospace;font-size:11px}
-.hint{color:var(--muted);font-style:italic;font-size:12px}
+/* RIGHT PANEL */
+#right { padding:14px 16px; overflow-y:auto; background:rgba(11,18,32,.55); border-left:1px solid rgba(255,255,255,.06); }
+#right h2 { margin:4px 0 6px; font-size:14px; }
+#right .key { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; margin-top:6px; }
+#right p { margin:4px 0; font-size:13px; line-height:1.45; color:#cbd5e9; }
+#right table { width:100%; font-size:12px; border-collapse:collapse; margin-top:6px; }
+#right td { padding:3px 4px; border-bottom:1px dashed rgba(255,255,255,.07); vertical-align:top; }
+#right td:first-child { color:var(--muted); width:38%; font-family:ui-monospace,monospace; font-size:11px; }
+.hint { color:var(--muted); font-style:italic; font-size:12px; }
 </style>
 </head>
 <body>
 
-<!-- ═══ LEFT: Overview ═══ -->
+<!-- ═══ LEFT OVERVIEW ═══ -->
 <div id="overview">
-  <h2>semantic-disk-search</h2>
-  <p>Hybrid semantic search for a local document corpus. A natural-language query returns a ranked, cited AI answer in ~4 minutes.</p>
-  <div class="ov-layer"><span class="chip" style="background:#5db890"></span><strong>Entry scripts</strong> — dsearch (3 modes), dsearch-multimodel</div>
-  <div class="ov-layer"><span class="chip" style="background:#8b78e6"></span><strong>Claude steps</strong> — query expand (1), agent ranking (4 ×10), final answer (6)</div>
-  <div class="ov-layer"><span class="chip" style="background:#e87c3e"></span><strong>Cohere</strong> — embed-multilingual-v3.0 → ChromaDB retrieval</div>
-  <div class="ov-layer"><span class="chip" style="background:#4fc3d7"></span><strong>Extraction</strong> — PDF · DOCX · XLSX · OCR sidecars</div>
-  <div class="ov-layer"><span class="chip" style="background:#d4a827"></span><strong>Data stores</strong> — ChromaDB (~1M chunks), 5 FAISS indexes, Xapian BM25</div>
-  <div class="ov-layer"><span class="chip" style="background:#5a7090"></span><strong>Outputs</strong> — terminal list · HTML table · cited answer</div>
-  <p class="ov-rule">Key design: agents <em>rank</em> files 0–10 without answering. Claude only reads the top 15 originals for synthesis. Separates recall from generation — prevents citation hallucination.</p>
-  <p class="ov-rule">Cost: Cohere API only (~free tier for queries). Claude runs via your existing subscription — no per-token billing. Deep mode: a few extra Cohere calls.</p>
-  <p class="ov-how">Click any box or arrow for details · drag to rearrange · yellow dot bends arrows · Reset layout restores defaults.</p>
+  <h2>dsearch2 v7.2 Pipeline</h2>
+  <p>Hybrid semantic disk search. 950K chunks from 128K files. Query flows left→right through alias expansion, 3 active retrieval arms, RRF fusion, then optional AI answer.</p>
+
+  <div class="ov-layer ov-active"><strong style="color:var(--active)">Active arms (3):</strong> BGE-M3 vector (W=1.0), TF-IDF lexical (W=1.0), Recoll path BM25 (W=1.5). These 3 cover orthogonal axes — semantic, exact-term, filesystem.</div>
+  <div class="ov-layer ov-disabled"><strong style="color:var(--disabled)">Disabled (2):</strong> Recoll content (W=0.0, noise) and FTS5 (W=0.0, lexical axis saturated — 0 gains in grid search).</div>
+  <div class="ov-layer ov-optional"><strong style="color:var(--optional)">Optional:</strong> HyDE via --hyde flag (helps abstract queries, hurts navigational — net −5.7pp, manual only).</div>
+  <div class="ov-layer ov-data"><strong style="color:var(--data)">Data stores:</strong> ChromaDB BGE (vectors), SQLite chunks.db (text + FTS5, 900× faster than ChromaDB text fetch).</div>
+
+  <p class="ov-rule"><span class="ov-metric">38/70</span> golden hits (54.3%). Easy: 30/38 (79%). Hard: 8/32 (25%). Retrieval-side ceiling reached — further gains need data quality work.</p>
+
+  <div class="ov-how">Click a box or arrow for details · drag boxes · bend arrows with yellow dot · positions auto-saved per browser.</div>
 </div>
 
-<!-- ═══ CENTER: Canvas ═══ -->
+<!-- ═══ CENTER CANVAS ═══ -->
 <div id="left">
-  <h1>semantic-disk-search — Architecture</h1>
-  <div class="sub">Drag boxes · click arrow → drag yellow dot to bend · blue dots move endpoints · positions auto-saved per browser</div>
+  <h1>dsearch2 v7.2 — Pipeline Architecture</h1>
+  <div class="sub">Drag boxes &amp; labels · click an arrow then drag its blue ends to re-route or the yellow dot to bend · positions saved per-browser.</div>
   <div class="toolbar">
     <button class="btn" onclick="toggleOverview()">⮜ Overview</button>
     <button class="btn" onclick="toggleDetails()">Details ⮞</button>
@@ -105,393 +108,703 @@ text{user-select:none;pointer-events:none}
     <button class="btn" onclick="document.getElementById('imp').click()">Import…</button>
     <input id="imp" type="file" accept=".json" style="display:none" onchange="importLayout(event)">
     <span id="saved-ind"></span>
+    <span id="toolbar-hint">auto-saves every change (per-browser)</span>
   </div>
   <div id="wrap">
-    <svg id="svg" viewBox="0 0 1620 1220" width="1620" height="1220" xmlns="http://www.w3.org/2000/svg">
+    <svg id="svg" viewBox="0 0 1500 750" width="1500" height="750" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <marker id="arr"  viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#9aa6c2"/></marker>
-        <marker id="arr-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="rgba(139,120,230,.7)"/></marker>
-        <marker id="arr-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="rgba(232,124,62,.7)"/></marker>
-        <marker id="arr-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="rgba(107,122,153,.5)"/></marker>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#9aa6c2"/>
+        </marker>
+        <marker id="arrow-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#5db890"/>
+        </marker>
+        <marker id="arrow-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(224,96,112,.5)"/>
+        </marker>
+        <marker id="arrow-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(110,168,254,.5)"/>
+        </marker>
+        <marker id="arrow-y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(244,211,94,.5)"/>
+        </marker>
       </defs>
 
-      <!-- ═══ ARROWS (drawn first) ═══ -->
+      <!-- ═══ ARROWS (drawn first, nodes paint over endpoints) ═══ -->
       <g id="arrows">
-        <!-- main vertical pipeline -->
-        <g class="arrow" data-key="a_query_dsearch"><path d="M 160 106 L 160 165" marker-end="url(#arr)"/></g>
-        <g class="arrow" data-key="a_dsearch_dansw"><path d="M 270 210 L 350 200" marker-end="url(#arr)"/></g>
-        <g class="arrow" data-key="a_dsearch_term"> <path d="M 150 261 L 150 394" marker-end="url(#arr)"/></g>
-        <g class="arrow" data-key="a_dsearch_html"> <path d="M 168 261 Q 185 330 168 464" marker-end="url(#arr)"/></g>
-        <g class="arrow" data-key="a_dansw_step1">  <path d="M 477 236 L 477 295" marker-end="url(#arr)"/></g>
-        <g class="arrow" data-key="a_step1_step2">  <path d="M 477 396 L 477 455" marker-end="url(#arr)"/></g>
-        <g class="arrow" data-key="a_step2_step3">  <path d="M 477 556 L 477 620" marker-end="url(#arr)"/></g>
-        <g class="arrow" data-key="a_step3_step4">  <path d="M 477 721 L 477 785" marker-end="url(#arr)"/></g>
-        <g class="arrow" data-key="a_step4_step5">  <path d="M 477 886 L 477 950" marker-end="url(#arr)"/></g>
-        <g class="arrow" data-key="a_step5_step6">  <path d="M 477 1016 L 477 1075" marker-end="url(#arr)"/></g>
-        <!-- deep loop branch -->
-        <g class="arrow dashed" data-key="a_step2_step2b"><path d="M 606 490 L 660 490" marker-end="url(#arr-p)"/></g>
-        <g class="arrow loop"   data-key="a_step2b_back"> <path d="M 772 455 Q 800 388 606 450" marker-end="url(#arr-p)"/></g>
-        <!-- service connections -->
-        <g class="arrow service" data-key="a_step1_claude"> <path d="M 606 335 Q 900 270 1255 208" marker-end="url(#arr-p)"/></g>
-        <g class="arrow service" data-key="a_step4_claude"> <path d="M 606 830 Q 1010 565 1368 258" marker-end="url(#arr-p)"/></g>
-        <g class="arrow service" data-key="a_step6_claude"> <path d="M 606 1125 Q 1100 700 1368 258" marker-end="url(#arr-p)"/></g>
-        <g class="arrow service" data-key="a_step2_cohere"> <path d="M 606 478 Q 930 432 1255 415" marker-end="url(#arr-o)"/></g>
-        <g class="arrow service" data-key="a_step2_chroma"> <path d="M 606 518 Q 780 510 955 492" marker-end="url(#arr-d)"/></g>
-        <g class="arrow service" data-key="a_multi_faiss">  <path d="M 270 626 Q 613 619 955 618" marker-end="url(#arr-d)"/></g>
-        <g class="arrow service" data-key="a_corpus_idx">   <path d="M 955 828 Q 904 660 955 492" marker-end="url(#arr-d)"/></g>
+        <!-- Query → Alias -->
+        <g class="arrow active" data-key="a_query_alias">
+          <path d="M 250 240 L 340 240" marker-end="url(#arrow-g)"/>
+        </g>
+        <!-- Alias → BGE -->
+        <g class="arrow active" data-key="a_alias_bge">
+          <path d="M 530 220 Q 580 100 620 100" marker-end="url(#arrow-g)"/>
+        </g>
+        <!-- Alias → TF-IDF -->
+        <g class="arrow active" data-key="a_alias_tfidf">
+          <path d="M 530 235 L 620 210" marker-end="url(#arrow-g)"/>
+        </g>
+        <!-- Alias → Recoll Path -->
+        <g class="arrow active" data-key="a_alias_recoll_path">
+          <path d="M 530 255 L 620 310" marker-end="url(#arrow-g)"/>
+        </g>
+        <!-- Alias → Recoll Content (disabled) -->
+        <g class="arrow disabled" data-key="a_alias_recoll_content">
+          <path d="M 530 265 Q 580 420 620 420" marker-end="url(#arrow-r)"/>
+        </g>
+        <!-- Alias → FTS5 (disabled) -->
+        <g class="arrow disabled" data-key="a_alias_fts5">
+          <path d="M 530 275 Q 580 520 620 520" marker-end="url(#arrow-r)"/>
+        </g>
+        <!-- BGE → RRF -->
+        <g class="arrow active" data-key="a_bge_rrf">
+          <path d="M 850 100 Q 920 100 970 220" marker-end="url(#arrow-g)"/>
+        </g>
+        <!-- TF-IDF → RRF -->
+        <g class="arrow active" data-key="a_tfidf_rrf">
+          <path d="M 850 210 L 970 240" marker-end="url(#arrow-g)"/>
+        </g>
+        <!-- Recoll Path → RRF -->
+        <g class="arrow active" data-key="a_recoll_path_rrf">
+          <path d="M 850 320 Q 920 320 970 260" marker-end="url(#arrow-g)"/>
+        </g>
+        <!-- RRF → Results -->
+        <g class="arrow active" data-key="a_rrf_results">
+          <path d="M 1170 245 L 1240 245" marker-end="url(#arrow-g)"/>
+        </g>
+        <!-- Results → Answer -->
+        <g class="arrow active" data-key="a_results_answer">
+          <path d="M 1340 280 Q 1340 380 1340 400" marker-end="url(#arrow)"/>
+        </g>
+        <!-- ChromaDB BGE → BGE (data feed) -->
+        <g class="arrow datafeed" data-key="a_store_bge">
+          <path d="M 730 640 L 730 140" marker-end="url(#arrow-b)"/>
+        </g>
+        <!-- SQLite → TF-IDF (data feed) -->
+        <g class="arrow datafeed" data-key="a_store_tfidf">
+          <path d="M 420 640 Q 420 400 700 240" marker-end="url(#arrow-b)"/>
+        </g>
+        <!-- HyDE → Query (optional) -->
+        <g class="arrow optional" data-key="a_hyde_query">
+          <path d="M 200 120 L 200 200" marker-end="url(#arrow-y)"/>
+        </g>
       </g>
 
       <!-- ═══ LABELS ═══ -->
       <g id="label-layer">
-        <g class="label"        data-key="l_term">  <text x="58"  y="334">terminal mode</text></g>
-        <g class="label"        data-key="l_html">  <text x="58"  y="432">-w flag</text></g>
-        <g class="label"        data-key="l_answ">  <text x="290" y="194">-CL… mode</text></g>
-        <g class="label strong" data-key="l_deep">  <text x="662" y="448">[-deep]</text></g>
-        <g class="label"        data-key="l_loop">  <text x="702" y="406">re-search ×3</text></g>
-        <g class="label"        data-key="l_cost">  <text x="285" y="1010">Cohere API only (~free for queries)</text></g>
-        <g class="label"        data-key="l_index"> <text x="864" y="748">one-time indexing</text></g>
+        <g class="label strong" data-key="l_bge_w"><text x="910" y="155">W = 1.0</text></g>
+        <g class="label strong" data-key="l_tfidf_w"><text x="910" y="222">W = 1.0</text></g>
+        <g class="label strong" data-key="l_recoll_path_w"><text x="910" y="295">W = 1.5</text></g>
+        <g class="label warn" data-key="l_recoll_content_w"><text x="875" y="410">W = 0.0</text></g>
+        <g class="label warn" data-key="l_fts5_w"><text x="875" y="510">W = 0.0</text></g>
+        <g class="label" data-key="l_store_bge"><text x="748" y="420">vectors</text></g>
+        <g class="label" data-key="l_store_tfidf"><text x="480" y="460">text (8.6ms)</text></g>
+        <g class="label" data-key="l_hyde_flag"><text x="130" y="165">--hyde flag</text></g>
       </g>
 
       <!-- ═══ NODES ═══ -->
       <g id="nodes">
+        <!-- QUERY INPUT -->
+        <g class="node" data-key="QUERY" transform="translate(50, 200)">
+          <rect class="nb" x="0" y="0" width="200" height="80" rx="10"
+                fill="rgba(176,160,224,.12)" stroke="var(--accent)"/>
+          <text class="nt" x="100" y="28" text-anchor="middle">Query Input</text>
+          <line x1="10" y1="38" x2="190" y2="38" stroke="var(--line)" stroke-opacity=".3"/>
+          <text class="ns" x="100" y="56" text-anchor="middle">user search terms</text>
+          <text class="ns" x="100" y="72" text-anchor="middle">Greek + English</text>
+        </g>
 
-        <!-- USER QUERY -->
-        <g class="node" data-key="QUERY" transform="translate(50,45)">
+        <!-- ALIAS EXPANSION -->
+        <g class="node" data-key="ALIAS" transform="translate(340, 200)">
+          <rect class="nb" x="0" y="0" width="190" height="80" rx="10"
+                fill="rgba(176,160,224,.12)" stroke="var(--accent)"/>
+          <text class="nt" x="95" y="28" text-anchor="middle">Alias Expansion</text>
+          <line x1="10" y1="38" x2="180" y2="38" stroke="var(--line)" stroke-opacity=".3"/>
+          <text class="ns" x="95" y="56" text-anchor="middle">alias_map.json</text>
+          <text class="ns" x="95" y="72" text-anchor="middle">multi-word phrases</text>
+        </g>
+
+        <!-- BGE-M3 VECTOR -->
+        <g class="node" data-key="BGE" transform="translate(620, 65)">
+          <rect class="nb" x="0" y="0" width="230" height="75" rx="10"
+                fill="rgba(93,184,144,.12)" stroke="var(--active)"/>
+          <text class="nt" x="115" y="24" text-anchor="middle">BGE-M3 Vector</text>
+          <line x1="10" y1="34" x2="220" y2="34" stroke="var(--line)" stroke-opacity=".3"/>
+          <text class="ns" x="115" y="50" text-anchor="middle">BAAI/bge-m3 · 1024-dim</text>
+          <text class="ns" x="115" y="66" text-anchor="middle">primary arm · local · private</text>
+        </g>
+
+        <!-- TF-IDF LEXICAL -->
+        <g class="node" data-key="TFIDF" transform="translate(620, 170)">
+          <rect class="nb" x="0" y="0" width="230" height="75" rx="10"
+                fill="rgba(93,184,144,.12)" stroke="var(--active)"/>
+          <text class="nt" x="115" y="24" text-anchor="middle">TF-IDF Lexical</text>
+          <line x1="10" y1="34" x2="220" y2="34" stroke="var(--line)" stroke-opacity=".3"/>
+          <text class="ns" x="115" y="50" text-anchor="middle">term frequency scoring</text>
+          <text class="ns" x="115" y="66" text-anchor="middle">exact keyword matching</text>
+        </g>
+
+        <!-- RECOLL PATH BM25 -->
+        <g class="node" data-key="RECOLL_PATH" transform="translate(620, 280)">
+          <rect class="nb" x="0" y="0" width="230" height="75" rx="10"
+                fill="rgba(93,184,144,.12)" stroke="var(--active)"/>
+          <text class="nt" x="115" y="24" text-anchor="middle">Recoll Path BM25</text>
+          <line x1="10" y1="34" x2="220" y2="34" stroke="var(--line)" stroke-opacity=".3"/>
+          <text class="ns" x="115" y="50" text-anchor="middle">filename + directory matching</text>
+          <text class="ns" x="115" y="66" text-anchor="middle">highest single-arm gain</text>
+        </g>
+
+        <!-- RECOLL CONTENT (DISABLED) -->
+        <g class="node" data-key="RECOLL_CONTENT" transform="translate(620, 385)">
+          <rect class="nb" x="0" y="0" width="230" height="70" rx="10"
+                fill="rgba(224,96,112,.06)" stroke="rgba(224,96,112,.3)" stroke-dasharray="5 3"/>
+          <text class="nt-dim" x="115" y="24" text-anchor="middle">Recoll Content BM25</text>
+          <line x1="10" y1="34" x2="220" y2="34" stroke="var(--line)" stroke-opacity=".15"/>
+          <text class="ns" x="115" y="50" text-anchor="middle" fill="var(--disabled)">DISABLED — adds noise</text>
+          <text class="ns" x="115" y="63" text-anchor="middle">disabling gained +1.9pp</text>
+        </g>
+
+        <!-- FTS5 (DISABLED) -->
+        <g class="node" data-key="FTS5" transform="translate(620, 485)">
+          <rect class="nb" x="0" y="0" width="230" height="70" rx="10"
+                fill="rgba(224,96,112,.06)" stroke="rgba(224,96,112,.3)" stroke-dasharray="5 3"/>
+          <text class="nt-dim" x="115" y="24" text-anchor="middle">SQLite FTS5 BM25</text>
+          <line x1="10" y1="34" x2="220" y2="34" stroke="var(--line)" stroke-opacity=".15"/>
+          <text class="ns" x="115" y="50" text-anchor="middle" fill="var(--disabled)">DISABLED — lexical saturated</text>
+          <text class="ns" x="115" y="63" text-anchor="middle">0 gains, 1-2 regressions</text>
+        </g>
+
+        <!-- RRF MERGE -->
+        <g class="node" data-key="RRF" transform="translate(970, 195)">
+          <rect class="nb" x="0" y="0" width="200" height="100" rx="12"
+                fill="rgba(176,160,224,.15)" stroke="var(--accent)" stroke-width="2"/>
+          <text class="nt" x="100" y="26" text-anchor="middle">RRF Merge</text>
+          <line x1="10" y1="36" x2="190" y2="36" stroke="var(--line)" stroke-opacity=".3"/>
+          <text class="ns" x="100" y="52" text-anchor="middle">Reciprocal Rank Fusion</text>
+          <text class="ns" x="100" y="66" text-anchor="middle">k=60 · dedup_per_file</text>
+          <text class="ns" x="100" y="82" text-anchor="middle">vec_protect: top-5→top-10</text>
+          <text class="ns" x="100" y="95" text-anchor="middle">score = Σ W/(k+rank)</text>
+        </g>
+
+        <!-- TOP-20 RESULTS -->
+        <g class="node" data-key="RESULTS" transform="translate(1240, 205)">
+          <rect class="nb" x="0" y="0" width="200" height="80" rx="10"
+                fill="rgba(244,211,94,.1)" stroke="var(--optional)"/>
+          <text class="nt" x="100" y="26" text-anchor="middle">Top-20 Results</text>
+          <line x1="10" y1="36" x2="190" y2="36" stroke="var(--line)" stroke-opacity=".3"/>
+          <text class="ns" x="100" y="54" text-anchor="middle" fill="var(--active)" font-weight="600">38/70 golden hits</text>
+          <text class="ns" x="100" y="70" text-anchor="middle">easy 30/38 · hard 8/32</text>
+        </g>
+
+        <!-- ANSWER PIPELINE -->
+        <g class="node" data-key="ANSWER" transform="translate(1240, 400)">
+          <rect class="nb" x="0" y="0" width="200" height="75" rx="10"
+                fill="rgba(176,160,224,.08)" stroke="rgba(176,160,224,.4)"/>
+          <text class="nt" x="100" y="24" text-anchor="middle">dsearch2-answer</text>
+          <line x1="10" y1="34" x2="190" y2="34" stroke="var(--line)" stroke-opacity=".3"/>
+          <text class="ns" x="100" y="50" text-anchor="middle">Claude reads top results</text>
+          <text class="ns" x="100" y="66" text-anchor="middle">cited answer + evidence</text>
+        </g>
+
+        <!-- HYDE (OPTIONAL) -->
+        <g class="node" data-key="HYDE" transform="translate(80, 60)">
           <rect class="nb" x="0" y="0" width="220" height="60" rx="10"
-                fill="rgba(233,238,247,.08)" stroke="rgba(233,238,247,.45)" stroke-width="1.5"/>
-          <text class="nt" x="110" y="22" text-anchor="middle">User Query</text>
-          <text class="ns" x="110" y="41" text-anchor="middle">natural language · any language</text>
+                fill="rgba(244,211,94,.06)" stroke="rgba(244,211,94,.35)" stroke-dasharray="6 3"/>
+          <text class="nt-dim" x="110" y="22" text-anchor="middle" fill="var(--optional)">HyDE Query Rewrite</text>
+          <line x1="10" y1="30" x2="210" y2="30" stroke="var(--line)" stroke-opacity=".15"/>
+          <text class="ns" x="110" y="46" text-anchor="middle">Ollama qwen2.5:7b · opt-in</text>
+          <text class="ns" x="110" y="56" text-anchor="middle">net −5.7pp as default</text>
         </g>
 
-        <!-- DSEARCH CLI -->
-        <g class="node" data-key="DSEARCH" transform="translate(50,165)">
-          <rect class="nb" x="0" y="0" width="220" height="95" rx="10"
-                fill="rgba(93,184,144,.12)" stroke="#5db890" stroke-width="1.5"/>
-          <text class="nt" x="110" y="21" text-anchor="middle">dsearch</text>
-          <line x1="10" y1="29" x2="210" y2="29" stroke="#5db890" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="45">bash CLI · dispatches 3 modes</text>
-          <text class="ns" x="14" y="60">Cohere embed + ChromaDB</text>
-          <text class="ni" x="14" y="77">/usr/local/bin/dsearch</text>
+        <!-- SQLITE STORE -->
+        <g class="node" data-key="SQLITE" transform="translate(310, 640)">
+          <rect class="nb" x="0" y="0" width="220" height="70" rx="10"
+                fill="rgba(110,168,254,.08)" stroke="rgba(110,168,254,.35)"/>
+          <text class="nt" x="110" y="22" text-anchor="middle" fill="var(--data)">SQLite chunks.db</text>
+          <line x1="10" y1="30" x2="210" y2="30" stroke="var(--line)" stroke-opacity=".2"/>
+          <text class="ns" x="110" y="46" text-anchor="middle">950K rows · text + metadata</text>
+          <text class="ns" x="110" y="62" text-anchor="middle">FTS5 index · 8.6ms lookup</text>
         </g>
 
-        <!-- TERMINAL OUTPUT -->
-        <g class="node" data-key="TERM_OUT" transform="translate(50,394)">
-          <rect class="nb" x="0" y="0" width="220" height="58" rx="8"
-                fill="rgba(90,112,144,.12)" stroke="#5a7090" stroke-width="1.2"/>
-          <text class="nt" x="110" y="20" text-anchor="middle" style="font-size:12px">Terminal output</text>
-          <text class="ns" x="110" y="38" text-anchor="middle">colour-scored list · snippets</text>
+        <!-- CHROMADB BGE STORE -->
+        <g class="node" data-key="CHROMADB_BGE" transform="translate(610, 640)">
+          <rect class="nb" x="0" y="0" width="230" height="70" rx="10"
+                fill="rgba(110,168,254,.08)" stroke="rgba(110,168,254,.35)"/>
+          <text class="nt" x="115" y="22" text-anchor="middle" fill="var(--data)">ChromaDB (BGE-M3)</text>
+          <line x1="10" y1="30" x2="220" y2="30" stroke="var(--line)" stroke-opacity=".2"/>
+          <text class="ns" x="115" y="46" text-anchor="middle">fulldisk-1k-bge · 1024-dim</text>
+          <text class="ns" x="115" y="62" text-anchor="middle">HNSW index · primary vectors</text>
         </g>
 
-        <!-- HTML TABLE -->
-        <g class="node" data-key="HTML_OUT" transform="translate(50,464)">
-          <rect class="nb" x="0" y="0" width="220" height="58" rx="8"
-                fill="rgba(90,112,144,.12)" stroke="#5a7090" stroke-width="1.2"/>
-          <text class="nt" x="110" y="20" text-anchor="middle" style="font-size:12px">HTML table (-w)</text>
-          <text class="ns" x="110" y="38" text-anchor="middle">sortable · filterable · browser</text>
+        <!-- CHROMADB COHERE (DISABLED) -->
+        <g class="node" data-key="CHROMADB_COHERE" transform="translate(920, 640)">
+          <rect class="nb" x="0" y="0" width="230" height="70" rx="10"
+                fill="rgba(224,96,112,.04)" stroke="rgba(224,96,112,.2)" stroke-dasharray="5 3"/>
+          <text class="nt-dim" x="115" y="22" text-anchor="middle">ChromaDB (Cohere)</text>
+          <line x1="10" y1="30" x2="220" y2="30" stroke="var(--line)" stroke-opacity=".1"/>
+          <text class="ns" x="115" y="46" text-anchor="middle">fulldisk-1k · --cohere to enable</text>
+          <text class="ns" x="115" y="62" text-anchor="middle" fill="var(--disabled)">disabled by default</text>
         </g>
-
-        <!-- DSEARCH-MULTIMODEL -->
-        <g class="node" data-key="MULTI" transform="translate(50,583)">
-          <rect class="nb" x="0" y="0" width="220" height="85" rx="10"
-                fill="rgba(93,184,144,.08)" stroke="#5db890" stroke-width="1.2" stroke-dasharray="5 3"/>
-          <text class="nt" x="110" y="21" text-anchor="middle" style="font-size:12px">dsearch-multimodel</text>
-          <line x1="10" y1="29" x2="210" y2="29" stroke="#5db890" stroke-opacity=".25"/>
-          <text class="ns" x="14" y="46">5 FAISS indexes (all models)</text>
-          <text class="ns" x="14" y="61">cohere · gte · e5 · bge-m3</text>
-          <text class="ni" x="14" y="77">--model flag to switch</text>
-        </g>
-
-        <!-- DSEARCH-ANSWER -->
-        <g class="node" data-key="DANSW" transform="translate(350,165)">
-          <rect class="nb" x="0" y="0" width="255" height="70" rx="10"
-                fill="rgba(93,184,144,.14)" stroke="#5db890" stroke-width="1.5"/>
-          <text class="nt" x="127" y="21" text-anchor="middle">dsearch-answer</text>
-          <line x1="10" y1="29" x2="245" y2="29" stroke="#5db890" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="46">Python · 6-step AI pipeline</text>
-          <text class="ni" x="14" y="62">/usr/local/bin/dsearch-answer</text>
-        </g>
-
-        <!-- STEP 1 -->
-        <g class="node" data-key="STEP1" transform="translate(350,295)">
-          <rect class="nb" x="0" y="0" width="255" height="100" rx="10"
-                fill="rgba(139,120,230,.13)" stroke="#8b78e6" stroke-width="1.5"/>
-          <text class="nt" x="127" y="19" text-anchor="middle" style="font-size:11.5px;fill:#c4b8f5">Step 1 — Query Understanding</text>
-          <line x1="10" y1="27" x2="245" y2="27" stroke="#8b78e6" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="43">Claude → JSON</text>
-          <text class="ns" x="14" y="58">core_query + variants</text>
-          <text class="ns" x="14" y="73">subject_terms + HyDE</text>
-          <text class="ni" x="14" y="90">fake answer → richer embed match</text>
-        </g>
-
-        <!-- STEP 2 -->
-        <g class="node" data-key="STEP2" transform="translate(350,455)">
-          <rect class="nb" x="0" y="0" width="255" height="100" rx="10"
-                fill="rgba(232,124,62,.13)" stroke="#e87c3e" stroke-width="1.5"/>
-          <text class="nt" x="127" y="19" text-anchor="middle" style="font-size:11.5px;fill:#f4a77a">Step 2 — Retrieval</text>
-          <line x1="10" y1="27" x2="245" y2="27" stroke="#e87c3e" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="43">Cohere embed all variants + HyDE</text>
-          <text class="ns" x="14" y="58">ChromaDB: ~1M chunks</text>
-          <text class="ns" x="14" y="73">→ top 100 candidate files</text>
-          <text class="ni" x="14" y="90">MMR diversity filter applied</text>
-        </g>
-
-        <!-- STEP 2B: DEEP LOOP -->
-        <g class="node" data-key="STEP2B" transform="translate(660,455)">
-          <rect class="nb" x="0" y="0" width="228" height="100" rx="10"
-                fill="rgba(139,120,230,.08)" stroke="#8b78e6" stroke-width="1.2" stroke-dasharray="5 3"/>
-          <text class="nt" x="114" y="19" text-anchor="middle" style="font-size:11px;fill:#c4b8f5">Deep loop [-deep]</text>
-          <line x1="10" y1="27" x2="218" y2="27" stroke="#8b78e6" stroke-opacity=".25"/>
-          <text class="ns" x="14" y="43">Read top-10 results</text>
-          <text class="ns" x="14" y="58">Extract new domain terms</text>
-          <text class="ns" x="14" y="73">Re-run Step 2 up to ×3</text>
-          <text class="ni" x="14" y="90">+1–2 min · improves vocab recall</text>
-        </g>
-
-        <!-- STEP 3 -->
-        <g class="node" data-key="STEP3" transform="translate(350,620)">
-          <rect class="nb" x="0" y="0" width="255" height="100" rx="10"
-                fill="rgba(79,195,215,.13)" stroke="#4fc3d7" stroke-width="1.5"/>
-          <text class="nt" x="127" y="19" text-anchor="middle" style="font-size:11.5px;fill:#7fdce8">Step 3 — Text Extraction</text>
-          <line x1="10" y1="27" x2="245" y2="27" stroke="#4fc3d7" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="43">pdftotext (PDF)</text>
-          <text class="ns" x="14" y="58">antiword / zipfile (doc/docx/odt)</text>
-          <text class="ns" x="14" y="73">openpyxl / xlrd (xlsx/xls)</text>
-          <text class="ni" x="14" y="90">OCR *.ocr.txt sidecars for images</text>
-        </g>
-
-        <!-- STEP 4 -->
-        <g class="node" data-key="STEP4" transform="translate(350,785)">
-          <rect class="nb" x="0" y="0" width="255" height="100" rx="10"
-                fill="rgba(139,120,230,.13)" stroke="#8b78e6" stroke-width="1.5"/>
-          <text class="nt" x="127" y="19" text-anchor="middle" style="font-size:11.5px;fill:#c4b8f5">Step 4 — Parallel Ranking</text>
-          <line x1="10" y1="27" x2="245" y2="27" stroke="#8b78e6" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="43">10 Claude agents · 6 concurrent</text>
-          <text class="ns" x="14" y="58">each scores 10 files: 0–10</text>
-          <text class="ns" x="14" y="73">relevance only — no answering yet</text>
-          <text class="ni" x="14" y="90">ThreadPoolExecutor · json_repair</text>
-        </g>
-
-        <!-- STEP 5 -->
-        <g class="node" data-key="STEP5" transform="translate(350,950)">
-          <rect class="nb" x="0" y="0" width="255" height="65" rx="10"
-                fill="rgba(90,112,144,.15)" stroke="#5a7090" stroke-width="1.2"/>
-          <text class="nt" x="127" y="21" text-anchor="middle" style="font-size:12px">Step 5 — Merge + Dedup</text>
-          <text class="ns" x="127" y="39" text-anchor="middle">aggregate agent scores → top 15</text>
-          <text class="ni" x="127" y="56" text-anchor="middle">stem dedup for email threads</text>
-        </g>
-
-        <!-- STEP 6 -->
-        <g class="node" data-key="STEP6" transform="translate(350,1075)">
-          <rect class="nb" x="0" y="0" width="255" height="100" rx="10"
-                fill="rgba(139,120,230,.18)" stroke="#8b78e6" stroke-width="2"/>
-          <text class="nt" x="127" y="19" text-anchor="middle" style="font-size:11.5px;fill:#c4b8f5">Step 6 — Final Answer</text>
-          <line x1="10" y1="27" x2="245" y2="27" stroke="#8b78e6" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="43">Claude reads 15 original files</text>
-          <text class="ns" x="14" y="58">synthesises → cited answer</text>
-          <text class="ns" x="14" y="73">[filename] citations + SOURCES</text>
-          <text class="ni" x="14" y="90">subscription-based · no per-call cost</text>
-        </g>
-
-        <!-- ── DATA STORES ── -->
-        <g class="node" data-key="CHROMADB" transform="translate(955,450)">
-          <rect class="nb" x="0" y="0" width="215" height="90" rx="10"
-                fill="rgba(212,168,39,.13)" stroke="#d4a827" stroke-width="1.5"/>
-          <text class="nt" x="107" y="21" text-anchor="middle" style="fill:#e8c547">ChromaDB</text>
-          <line x1="10" y1="29" x2="205" y2="29" stroke="#d4a827" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="45">~997 K chunks · 8.3 GB</text>
-          <text class="ns" x="14" y="60">Cohere embed-v3 · 1024-dim</text>
-          <text class="ni" x="14" y="77">$CHROMADB_DIR</text>
-        </g>
-
-        <g class="node" data-key="FAISS_IDX" transform="translate(955,562)">
-          <rect class="nb" x="0" y="0" width="215" height="108" rx="10"
-                fill="rgba(212,168,39,.10)" stroke="#d4a827" stroke-width="1.4"/>
-          <text class="nt" x="107" y="21" text-anchor="middle" style="fill:#e8c547">FAISS Indexes</text>
-          <line x1="10" y1="29" x2="205" y2="29" stroke="#d4a827" stroke-opacity=".3"/>
-          <text class="ns" x="14" y="45">5 models: cohere-v3 ★</text>
-          <text class="ns" x="14" y="60">e5-base · e5-large · gte · bge-m3</text>
-          <text class="ns" x="14" y="75">dims: 768 or 1024</text>
-          <text class="ni" x="14" y="92">$FAISS_BASE/{model}/index.faiss</text>
-        </g>
-
-        <g class="node" data-key="XAPIAN" transform="translate(955,692)">
-          <rect class="nb" x="0" y="0" width="215" height="68" rx="10"
-                fill="rgba(212,168,39,.08)" stroke="#d4a827" stroke-width="1.2"/>
-          <text class="nt" x="107" y="20" text-anchor="middle" style="font-size:12px;fill:#e8c547">Xapian BM25</text>
-          <text class="ns" x="14" y="38">Recoll · 282 K docs · 7.3 GB</text>
-          <text class="ni" x="14" y="55">$XAPIAN_DB (recollindex)</text>
-        </g>
-
-        <g class="node" data-key="CORPUS" transform="translate(955,785)">
-          <rect class="nb" x="0" y="0" width="215" height="85" rx="10"
-                fill="rgba(90,112,144,.12)" stroke="#5a7090" stroke-width="1.2"/>
-          <text class="nt" x="107" y="20" text-anchor="middle" style="font-size:12px">Document Corpus</text>
-          <line x1="10" y1="28" x2="205" y2="28" stroke="#5a7090" stroke-opacity=".3"/>
-          <text class="ns" x="14" y="44">PDF · DOCX · XLSX · ODT</text>
-          <text class="ns" x="14" y="59">images (OCR'd) · emails · text</text>
-          <text class="ni" x="14" y="76">$CORPUS_DIR</text>
-        </g>
-
-        <!-- ── EXTERNAL SERVICES ── -->
-        <g class="node" data-key="COHERE_SVC" transform="translate(1258,375)">
-          <rect class="nb" x="0" y="0" width="228" height="85" rx="10"
-                fill="rgba(224,122,95,.13)" stroke="#e07a5f" stroke-width="1.5"/>
-          <text class="nt" x="114" y="21" text-anchor="middle" style="fill:#f0a090">Cohere API</text>
-          <line x1="10" y1="29" x2="218" y2="29" stroke="#e07a5f" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="45">embed-multilingual-v3.0</text>
-          <text class="ns" x="14" y="60">1024-dim · multilingual</text>
-          <text class="ni" x="14" y="77">COHERE_API_KEY in .env</text>
-        </g>
-
-        <g class="node" data-key="CLAUDE_SVC" transform="translate(1258,165)">
-          <rect class="nb" x="0" y="0" width="228" height="100" rx="10"
-                fill="rgba(139,120,230,.18)" stroke="#8b78e6" stroke-width="2"/>
-          <text class="nt" x="114" y="21" text-anchor="middle" style="fill:#c4b8f5">Claude CLI</text>
-          <line x1="10" y1="29" x2="218" y2="29" stroke="#8b78e6" stroke-opacity=".35"/>
-          <text class="ns" x="14" y="45">claude -p (headless subprocess)</text>
-          <text class="ns" x="14" y="60">Steps 1 · 4 (×10 agents) · 6</text>
-          <text class="ns" x="14" y="75">subscription — no extra API key</text>
-          <text class="ni" x="14" y="92">json_repair for LLM output</text>
-        </g>
-
       </g>
 
+      <!-- HANDLE LAYER (JS fills) -->
       <g id="handle-layer"></g>
     </svg>
   </div>
-  <footer>semantic-disk-search · positions auto-saved in localStorage (dsearch-* keys) · docs/index.html has per-script flow detail</footer>
+  <footer style="font-size:10px;color:var(--muted);margin-top:4px;">dsearch2 v7.2 · positions in localStorage · June 2026</footer>
 </div>
 
-<!-- ═══ RIGHT: Details panel ═══ -->
+<!-- ═══ RIGHT DETAILS PANEL ═══ -->
 <div id="right">
   <div id="panel"><div class="hint">Click any box or arrow to see details here.</div></div>
 </div>
 
+<!-- ═══ DATA ═══ -->
 <script>
 const DATA = {
-  QUERY:{title:'User Query',desc:'Natural language question in any language. Greek and English both supported. Passed as a positional argument: dsearch "my question".',props:{'Example':'"find all documents about project delays"','Deep example':'"comprehensive review of Siemens proposal"','Passed as':'positional argv → $QUERY'}},
-  DSEARCH:{title:'dsearch CLI',desc:'Main entry point bash script. Sources ~/.config/dsearch/.env, parses flags, and dispatches to one of three modes: coloured terminal list, HTML table in browser, or the full AI answer pipeline.',props:{'Default':'terminal · 50 results','-n N':'change result count','-w flag':'HTML table in browser','-CLexpand…':'AI answer pipeline','-deep':'multi-hop retrieval','Location':'/usr/local/bin/dsearch'}},
-  TERM_OUT:{title:'Terminal Output',desc:'Default mode (no flags). Colour-coded ranked results: green ≥0.6, yellow ≥0.5, red <0.5. Each row shows score, file path, category tag, and a snippet with query words highlighted using Unicode-aware regex.',props:{'Default n':'50 results','Override':'-n 20','Highlight':'word-boundary regex (works for Greek)'}},
-  HTML_OUT:{title:'HTML Table (-w)',desc:'Self-contained HTML page built inline, written to /tmp/dsearch_results.html, opened with xdg-open. 9 sortable columns. Live filter box matches across all columns. "Group by folder" clusters results. Catppuccin dark theme.',props:{'Columns':'rank · score · category · folder · file · ext · date · chunk · snippet','Sort':'click any header','Filter':'live substring match across all columns','Group':'group-by-folder toggle'}},
-  MULTI:{title:'dsearch-multimodel',desc:'Alternative CLI that searches a specific FAISS index instead of ChromaDB. Useful for comparing retrieval quality across all 5 embedding models on the same query.',props:{'--model':'cohere | gte | e5 | e5-large | bge-m3','--top':'results per query (default 10)','Default':'cohere-v3','Embeds':'Cohere API or local sentence-transformers','Location':'/usr/local/bin/dsearch-multimodel'}},
-  DANSW:{title:'dsearch-answer',desc:'Python script implementing the full 6-step AI pipeline. Invoked by dsearch via exec() when -CLexpand-CLrank-CLanswer is passed. Uses ThreadPoolExecutor for parallel Claude agents and json_repair for LLM JSON fault tolerance.',props:{'Runtime':'~4 min standard · ~6 min deep','Concurrency':'6 Claude workers','Deps':'cohere · chromadb · json_repair · regex','Location':'/usr/local/bin/dsearch-answer'}},
-  STEP1:{title:'Step 1 — Query Understanding',desc:'Claude parses the raw query into a JSON object. The hypothetical answer (HyDE) is the key innovation: Claude generates a fake answer using domain vocabulary, which is embedded alongside the real query. This bridges vocabulary gaps between how users phrase queries and how documents are written.',props:{'Model':'Claude (claude -p)','Output':'JSON: core_query, variants, subject_terms, hyde','Why HyDE':'domain vocab in fake answer → better vector match','Fallback':'raw query string if JSON parse fails'}},
-  STEP2:{title:'Step 2 — Retrieval',desc:'All query variants plus the HyDE text are each embedded with Cohere embed-multilingual-v3.0. ChromaDB is queried for each vector. Results from all queries are merged and de-duplicated with MMR (Maximal Marginal Relevance) to ensure diversity across the top-100 candidate files.',props:{'Embed model':'embed-multilingual-v3.0 (1024-dim)','Vector store':'ChromaDB (~997K chunks)','Diversity':'MMR prevents same file appearing from multiple chunk matches','Output':'top 100 unique file paths + scores'}},
-  STEP2B:{title:'Deep Loop [-deep]',desc:'Activated by the -deep flag. After the initial top-100 retrieval, Claude reads the top 10 results and extracts new domain-specific terms not present in the original query. Step 2 is re-run with these new terms. Repeated up to 3 times. Substantially improves recall on terminology-gap queries.',props:{'Trigger':'-deep flag','Iterations':'max 3 loops','Extra time':'+1–2 minutes','Extra cost':'a few extra Cohere embed calls (free tier)','Best for':'technical/domain queries where user vocabulary ≠ document vocabulary'}},
-  STEP3:{title:'Step 3 — Text Extraction',desc:'Reads the actual file content for each of the 100 candidate files. Uses the best available extractor per file type. Falls back to OCR sidecar files (*.ocr.txt) for scanned images and image-only PDFs created during indexing.',props:{'PDF':'pdftotext (poppler-utils)','DOC':'antiword','DOCX / ODT':'zipfile (XML parsing, no subprocess)','XLSX':'openpyxl','XLS':'xlrd','Scanned images':'*.ocr.txt sidecar files','Truncation':'max 30 000 chars per file'}},
-  STEP4:{title:'Step 4 — Parallel Ranking',desc:'The 100 candidate files are split into 10 batches of 10. Each batch is sent to a separate Claude agent that scores each file 0–10 for relevance to the query. Agents DO NOT answer the question — they only rank. This separation prevents the ranking step from generating hallucinated context. 6 workers run concurrently via ThreadPoolExecutor.',props:{'Agents':'10 (one per batch of 10 files)','Concurrency':'6 workers (ThreadPoolExecutor)','Score range':'0 = irrelevant · 10 = perfect match','LLM invocation':'claude -p via subprocess','JSON fault tolerance':'json_repair library'}},
-  STEP5:{title:'Step 5 — Merge + Dedup',desc:'Agent scores are aggregated across all 10 batches. Duplicate files (same content referenced via different paths — common with email threads) are deduplicated by stem comparison. The top 15 unique files by aggregate score are selected for the final step.',props:{'Output':'top 15 unique files','Dedup method':'path stem comparison','Why 15':'balances Claude context window size vs. citation breadth'}},
-  STEP6:{title:'Step 6 — Final Answer',desc:'Claude is given the full extracted text of the top 15 files and the original query. It synthesises a cited answer using [filename] inline references and produces a SOURCES list. Crucially, it reads ORIGINAL extracted text — not agent summaries — preventing citation drift and hallucination.',props:{'Context':'full text of top 15 original files','Citations':'[filename] inline + SOURCES list at end','Why originals':'agents only rank; summary-based answering produces hallucinated citations','Cost':'subscription — no per-token billing (uses claude -p)'}},
-  CHROMADB:{title:'ChromaDB',desc:'Persistent vector database storing ~997K text chunks from the entire document corpus. Each chunk is 500 tokens with 100-token overlap, embedded with Cohere embed-multilingual-v3.0 (1024-dim). Primary retrieval store used by both dsearch and dsearch-answer.',props:{'Chunks':'~997 000','Embed model':'cohere/embed-multilingual-v3.0','Dims':'1024','Size':'8.3 GB','Config':'$CHROMADB_DIR · built by extract_chunks.py + cohere_embed.py'}},
-  FAISS_IDX:{title:'FAISS Indexes',desc:'Five separate FAISS flat (exact) indexes, one per embedding model. Used by dsearch-multimodel for model comparison. Built locally on CPU (6+ hours per model for a large corpus) or on a cloud GPU instance using scripts/gpu_embed_multi.py.',props:{'Models':'cohere-v3 · e5-base · e5-large · gte · bge-m3','Best MRR':'cohere-v3 (0.91)','Config':'$FAISS_BASE/{model}/index.faiss + metadata.json','GPU build':'scripts/gpu_embed_multi.py (T4 spot instance)'}},
-  XAPIAN:{title:'Xapian BM25 (Recoll)',desc:'Full-text BM25 index built by Recoll. Indexes 282K documents including metadata, email attachments, and OCR-extracted text. Available as a 6th retrieval source for hybrid search and used by recoll_query_assist.py.',props:{'Docs':'282 000','Size':'7.3 GB','Tool':'Recoll + recollindex','Config':'$XAPIAN_DB · make recoll-reindex'}},
-  CORPUS:{title:'Document Corpus',desc:'The local directory tree being searched. Files are parsed during indexing (one-time, by extract_chunks.py) and read again during retrieval (Step 3, for each query). Supports all major document formats including scanned images with OCR sidecars.',props:{'Location':'$CORPUS_DIR','Formats':'PDF · DOCX · ODT · XLSX · XLS · TXT · EML · images','OCR':'*.ocr.txt sidecars created during bulk OCR pass','Example size':'~63K files · 144 GB'}},
-  COHERE_SVC:{title:'Cohere API',desc:'Used exclusively for embedding. embed-multilingual-v3.0 handles both Greek and English equally well (1024-dim). Free tier covers query embedding; paid tier needed for bulk corpus indexing.',props:{'Model':'embed-multilingual-v3.0','Dims':'1024','query type':'input_type=search_query','index type':'input_type=search_document','Index cost':'~$1.60 per million chunks','Query cost':'free tier sufficient'}},
-  CLAUDE_SVC:{title:'Claude CLI',desc:'Invoked via subprocess (claude -p) across Steps 1, 4, and 6. No separate Anthropic API key needed — the pipeline uses the user\'s existing Claude subscription. json_repair handles the occasional malformed JSON from LLM output.',props:{'Invocation':'claude -p (headless, non-interactive)','Steps used':'1 · 4 (×10 concurrent) · 6','Fault tolerance':'json_repair library','Cost model':'subscription (no per-call billing)'}},
-  a_query_dsearch:{title:'Query → dsearch',desc:'User passes their query as CLI arguments. dsearch reads $* and optionally prompts interactively if no args given.',props:{'Syntax':'dsearch "my question"','Interactive fallback':'read -p "Query: " QUERY'}},
-  a_dsearch_dansw:{title:'dsearch → dsearch-answer',desc:'When -CLexpand-CLrank-CLanswer is set, dsearch calls exec to replace the shell process with dsearch-answer. No subprocess wrapper — exec is more efficient.',props:{'Mechanism':'exec $VENV_GTE dsearch-answer','Args':'$DEEPMODE "$QUERY" "$NRESULTS"'}},
-  a_dsearch_term:{title:'Terminal mode path',desc:'Default (no flags). Inline Python heredoc in bash runs embed+query+colorprint pipeline. Exits after printing.',props:{}},
-  a_dsearch_html:{title:'HTML mode path (-w)',desc:'Python heredoc builds the full self-contained HTML page and writes to /tmp/dsearch_results.html. xdg-open launches the default browser.',props:{'Output':'/tmp/dsearch_results.html','Browser':'xdg-open (background &)'}},
-  a_step2_step2b:{title:'Step 2 → Deep loop',desc:'Only activated with the -deep flag. After initial retrieval, Claude reads the top-10 results and extracts vocabulary not in the original query.',props:{'Trigger':'-deep flag','Max iterations':'3 additional rounds'}},
-  a_step2b_back:{title:'Deep loop → re-run Step 2',desc:'After extracting new terms from the top results, the loop embeds them with Cohere and re-queries ChromaDB. Discovered terms are added to the running result set.',props:{'New terms':'extracted by Claude from top-10 texts','Effect':'expands recall for vocabulary-mismatch queries'}},
-  a_step1_claude:{title:'Step 1 → Claude',desc:'Claude receives the raw query and outputs a JSON object with core_query, variants (rephrasing), subject_terms (entities), and hypothetical_answer (HyDE). Falls back to raw query if JSON parsing fails.',props:{'Prompt':'structured JSON extraction','Fallback':'raw query if JSON fails'}},
-  a_step4_claude:{title:'Step 4 → Claude (×10 agents)',desc:'10 Claude agents run with 6-worker concurrency. Each agent receives a batch of 10 file texts and the original query, and returns a JSON relevance score (0–10) for each file.',props:{'Workers':'6 concurrent (ThreadPoolExecutor)','Input per agent':'10 file texts + query','Output':'JSON scores array'}},
-  a_step6_claude:{title:'Step 6 → Claude (final)',desc:'Single Claude call. Receives the full extracted text of the top 15 ranked files and the original query. Generates a synthesised answer with inline citations.',props:{'Input':'top 15 original file texts','Output':'ANSWER + [citations] + SOURCES list'}},
-  a_step2_cohere:{title:'Step 2 → Cohere',desc:'All query variants (from Step 1) plus the HyDE text are each embedded. Multiple embed calls in one batch request when possible.',props:{'Input type':'search_query','Model':'embed-multilingual-v3.0'}},
-  a_step2_chroma:{title:'Step 2 → ChromaDB',desc:'Each embedded query vector is used to query the ChromaDB collection. n_results per query set to 100. All results aggregated and deduped across all variants.',props:{'Method':'collection.query(query_embeddings=[vec], n_results=100)'}},
-  a_multi_faiss:{title:'dsearch-multimodel → FAISS',desc:'Loads the requested model\'s FAISS index and metadata.json from disk. Embeds the query locally (sentence-transformers) or via Cohere, then calls faiss.index.search().',props:{'Default model':'cohere-v3','Local embed':'sentence-transformers for gte/e5/bge-m3','Remote embed':'Cohere API for cohere-v3'}},
-  a_corpus_idx:{title:'Corpus → Indexes (one-time indexing)',desc:'Run once before the pipeline is usable. extract_chunks.py parses all corpus files into 500-token overlapping chunks. cohere_embed.py (or gpu_embed_multi.py) embeds them. build_chroma_from_embeddings.py loads into ChromaDB.',props:{'Chunk size':'500 tokens · 100 overlap','Cost':'~$1.60 per million chunks (Cohere)','GPU option':'scripts/gpu_embed_multi.py on T4 spot instance','Make target':'make rebuild-cohere / make rebuild-gte'}},
+  QUERY: {
+    title: 'Query Input',
+    desc: 'User search terms in Greek, English, or mixed. Passed through alias expansion before reaching retrieval arms.',
+    props: { 'Languages': 'Greek + English (bilingual corpus)', 'Avg query': '3-6 terms', 'Example': 'μισθοδοσία Οκτωβρίου 2023' }
+  },
+  ALIAS: {
+    title: 'Alias Expansion',
+    desc: 'Dictionary-based query expansion. Maps Greek↔English synonyms and domain abbreviations. Multi-word phrase matching with overlap prevention.',
+    props: { 'Source': 'configs/alias_map.json', 'Method': 'sliding window phrase match', 'Examples': 'ΕΝΦΙΑ → property tax; packet tracer → cisco networking', 'Impact': 'consistent small gains on bilingual queries' }
+  },
+  BGE: {
+    title: 'BGE-M3 Vector Search',
+    desc: 'Primary retrieval arm. Embeds query with BAAI/bge-m3 (1024-dim dense), queries ChromaDB HNSW index. Local model — no API calls, no data leaving the machine.',
+    props: { 'Model': 'BAAI/bge-m3', 'Dimensions': '1024 (dense mode)', 'Weight': 'W = 1.0', 'Candidates': 'max(n×3, 1000)', 'Status': 'ACTIVE — primary vector signal', 'Privacy': 'fully local, no cloud API' }
+  },
+  TFIDF: {
+    title: 'TF-IDF Lexical Scoring',
+    desc: 'Exact term-frequency scoring over chunk text fetched from SQLite. Catches keyword matches that embedding similarity might miss.',
+    props: { 'Weight': 'W = 1.0', 'Text source': 'SQLite chunks.db (8.6ms)', 'Method': 'term frequency × inverse rarity', 'Status': 'ACTIVE' }
+  },
+  RECOLL_PATH: {
+    title: 'Recoll Path BM25',
+    desc: 'BM25 search restricted to filename and directory path via Recoll/Xapian. Exploits meaning encoded in filesystem hierarchy (folder names, dates, document types in filenames).',
+    props: { 'Weight': 'W = 1.5 (highest)', 'Method': 'recollq dir: and filename: fields', 'Status': 'ACTIVE — largest single-arm recall gain (+12.4pp when first added)', 'Key insight': 'filesystem structure carries retrieval signal that embeddings cannot capture' }
+  },
+  RECOLL_CONTENT: {
+    title: 'Recoll Content BM25',
+    desc: 'Full-text BM25 search over document content via Recoll/Xapian. DISABLED because it adds noise that displaces correct results.',
+    props: { 'Weight': 'W = 0.0 (disabled)', 'Why disabled': 'disabling gained +1.9pp (v7.1c)', 'Root cause': 'redundant with TF-IDF — same lexical signal, different scoring', 'Status': 'DISABLED' }
+  },
+  FTS5: {
+    title: 'SQLite FTS5 BM25',
+    desc: 'BM25 search via SQLite FTS5 virtual table (unicode61 tokenizer) over 950K chunks. Tested as 5th RRF arm in a grid search across 4 weight configurations.',
+    props: { 'Weight': 'W = 0.0 (disabled)', 'Grid search': '4 configs: W=0.25, 0.5, 0.75, 1.0', 'Result': '0 gains, 1-2 regressions at every weight', 'Why failed': 'TF-IDF + Recoll-path already handle keyword matching — FTS5 is redundant lexical coverage that only adds common-keyword noise', 'Status': 'DISABLED — lexical axis proved saturated' }
+  },
+  HYDE: {
+    title: 'HyDE — Hypothetical Document Embeddings',
+    desc: 'Ollama qwen2.5:7b generates a hypothetical answer, which is embedded instead of the original query. Helps abstract/reasoning queries but destroys navigational/keyword queries.',
+    props: { 'Model': 'Ollama qwen2.5:7b (local)', 'Gained': '+3 abstract queries (tax, property value, legal)', 'Lost': '-7 navigational queries (payroll, alarm notes, tool names)', 'Net': '-5.7 percentage points', 'Latency': '+15-22s per query', 'Status': 'OPT-IN only (--hyde flag)', 'When useful': 'queries using different words than the target document' }
+  },
+  RRF: {
+    title: 'Reciprocal Rank Fusion',
+    desc: 'Merges ranked lists from all active arms into a single ranking. Score = Σ W/(k+rank) for each arm. Includes dedup_per_file and vector protection (strong vector hits cannot be buried by noisy arms).',
+    props: { 'Formula': 'score = Σ W/(k+rank)', 'Damping k': '60', 'Dedup': 'best chunk per file', 'Vec protect': 'top-5 vectors must stay in RRF top-10', 'Active arms': '3 (BGE W=1.0, TF-IDF W=1.0, Recoll-path W=1.5)', 'Key insight': 'complementary axes matter, redundant ones only add noise' }
+  },
+  RESULTS: {
+    title: 'Top-20 Results',
+    desc: 'Final ranked list after RRF fusion. Evaluated against a frozen golden benchmark of 70 stress-test queries (38 easy + 32 deliberately hard).',
+    props: { 'Total hits': '38/70 (54.3%)', 'Easy': '30/38 (78.9%) — realistic daily use', 'Hard': '8/32 (25.0%) — adversarial edge cases', 'Ceiling': 'every arm added after BGE was net-negative → retrieval-side saturation confirmed' }
+  },
+  ANSWER: {
+    title: 'dsearch2-answer Pipeline',
+    desc: 'Optional AI answer layer. Claude reads the top-N retrieved documents and produces a cited answer with evidence classification (CONFIRMED / SUPPORTED / UNCONFIRMED).',
+    props: { 'LLM': 'Claude (via subscription CLI)', 'Input': 'top-20 retrieved chunks', 'Output': 'cited answer + claim evidence + source list', 'Cost': '$0 extra (subscription-based)' }
+  },
+  SQLITE: {
+    title: 'SQLite chunks.db',
+    desc: 'Text + metadata store for all 950K chunks. Replaced ChromaDB cross-collection text fetch — 900× faster (8.6ms vs 7.7s). Also hosts the FTS5 virtual table.',
+    props: { 'Rows': '950,429', 'Size': '~2.1 GB', 'Lookup time': '8.6ms (indexed)', 'Old time': '7.7s (ChromaDB cross-fetch)', 'Speedup': '900×', 'FTS5': 'unicode61 tokenizer, BM25 ranking', 'Schema': 'id, text, path, metadata JSON' }
+  },
+  CHROMADB_BGE: {
+    title: 'ChromaDB — BGE-M3 Collection',
+    desc: 'HNSW vector index for BGE-M3 embeddings. Vectors only (no document text — text comes from SQLite for speed).',
+    props: { 'Collection': 'fulldisk-1k-bge', 'Vectors': '950K × 1024-dim', 'Index': 'HNSW (approximate nearest neighbor)', 'Contains': 'vectors + chunk IDs only', 'Text': 'fetched from SQLite, not stored here' }
+  },
+  CHROMADB_COHERE: {
+    title: 'ChromaDB — Cohere Collection (Legacy)',
+    desc: 'Original vector index using Cohere embed-multilingual-v3.0 embeddings. Disabled by default since BGE-M3 integration. Retained for comparison and fallback.',
+    props: { 'Collection': 'fulldisk-1k', 'Status': 'disabled by default (--cohere to enable)', 'Model': 'Cohere embed-multilingual-v3.0', 'Contains': 'vectors + document text', 'Why kept': 'regression insurance — 5/73 queries only Cohere hits' }
+  },
+  // Arrow data
+  a_query_alias: { title: 'Query → Alias Expansion', desc: 'Raw query terms passed to alias lookup before any retrieval.' },
+  a_alias_bge: { title: 'Expanded Query → BGE-M3', desc: 'Alias-expanded query embedded with BGE-M3 model and searched against HNSW index.' },
+  a_alias_tfidf: { title: 'Expanded Query → TF-IDF', desc: 'Query terms scored against chunk text from SQLite using term frequency.' },
+  a_alias_recoll_path: { title: 'Expanded Query → Recoll Path', desc: 'Query sent to Recoll with path-restricted BM25 search (dir: and filename: fields).' },
+  a_alias_recoll_content: { title: 'Expanded Query → Recoll Content', desc: 'DISABLED. Full-text BM25 via Recoll. Adds noise that displaces correct results.' },
+  a_alias_fts5: { title: 'Expanded Query → FTS5', desc: 'DISABLED. SQLite FTS5 BM25 search. Grid search proved 0 gains, 1-2 regressions — lexical axis saturated.' },
+  a_bge_rrf: { title: 'BGE-M3 → RRF (W=1.0)', desc: 'BGE ranked list fed to RRF merge with weight 1.0.' },
+  a_tfidf_rrf: { title: 'TF-IDF → RRF (W=1.0)', desc: 'TF-IDF ranked list fed to RRF merge with weight 1.0.' },
+  a_recoll_path_rrf: { title: 'Recoll Path → RRF (W=1.5)', desc: 'Recoll path ranked list fed to RRF merge with weight 1.5 — highest weight, reflecting its strong recall contribution.' },
+  a_rrf_results: { title: 'RRF → Results', desc: 'Merged, deduplicated, vector-protected ranking output as top-20 results.' },
+  a_results_answer: { title: 'Results → Answer Pipeline', desc: 'Top-20 chunks passed to Claude for cited answer generation (optional step).' },
+  a_store_bge: { title: 'ChromaDB → BGE-M3 Arm', desc: 'Vector lookup: query embedding compared against 950K stored BGE-M3 vectors via HNSW approximate nearest neighbor search.' },
+  a_store_tfidf: { title: 'SQLite → TF-IDF Arm', desc: 'Text lookup: chunk text fetched from SQLite (8.6ms) for term-frequency scoring. Replaced ChromaDB cross-fetch (was 7.7s) — 900× speedup.' },
+  a_hyde_query: { title: 'HyDE → Query (optional)', desc: 'When --hyde flag is used, Ollama generates a hypothetical answer document. Its embedding replaces the original query embedding for the BGE vector search. Helps abstract queries (+3), hurts navigational ones (-7). Net -5.7pp.' },
 };
+</script>
 
-// ── Engine ────────────────────────────────────────────────────────────
-const wrap=document.getElementById('wrap'),svg=document.getElementById('svg');
-const fmt=v=>+v.toFixed(1);
-function svgPt(cx,cy){const p=svg.createSVGPoint();p.x=cx;p.y=cy;return p.matrixTransform(svg.getScreenCTM().inverse())}
-function getTranslate(g){const xf=g.transform.baseVal;if(!xf.numberOfItems)return{dx:0,dy:0};const m=xf.consolidate().matrix;return{dx:m.e,dy:m.f}}
-// hit targets
-(function(){document.querySelectorAll('g.arrow[data-key]').forEach(g=>{const v=g.querySelector('path');if(!v)return;const h=v.cloneNode(false);h.setAttribute('class','hit-path');h.removeAttribute('marker-end');g.appendChild(h)})})();
-function setPathD(el,d){el.querySelectorAll('path').forEach(p=>p.setAttribute('d',d))}
-const origPaths={};document.querySelectorAll('g.arrow[data-key]').forEach(g=>{const p=g.querySelector('path');if(p)origPaths[g.dataset.key]=p.getAttribute('d')});
-let manualBends=JSON.parse(localStorage.getItem('dsearch-bends')||'{}');
+<!-- ═══ FULL INTERACTIVE ENGINE ═══ -->
+<script>
+const wrap = document.getElementById('wrap');
+const svg  = document.getElementById('svg');
+const fmt = v => +v.toFixed(1);
+
+function svgPt(cx, cy) {
+  const p = svg.createSVGPoint(); p.x = cx; p.y = cy;
+  return p.matrixTransform(svg.getScreenCTM().inverse());
+}
+function getTranslate(g) {
+  const xf = g.transform.baseVal;
+  if (!xf.numberOfItems) return {dx:0, dy:0};
+  const m = xf.consolidate().matrix;
+  return {dx: m.e, dy: m.f};
+}
+
+// phantom hit-targets
+(function () {
+  document.querySelectorAll('g.arrow[data-key]').forEach(g => {
+    const vis = g.querySelector('path');
+    if (!vis) return;
+    const hit = vis.cloneNode(false);
+    hit.setAttribute('class', 'hit-path');
+    hit.removeAttribute('marker-end');
+    hit.removeAttribute('marker-start');
+    g.appendChild(hit);
+  });
+})();
+function setPathD(arrowEl, d) {
+  arrowEl.querySelectorAll('path').forEach(p => p.setAttribute('d', d));
+}
+const origPaths = {};
+document.querySelectorAll('g.arrow[data-key]').forEach(g => {
+  const p = g.querySelector('path');
+  if (p) origPaths[g.dataset.key] = p.getAttribute('d');
+});
+let manualBends = JSON.parse(localStorage.getItem('dsearch2-bends')||'{}');
+
 // pan
-let panning=false,dragMoved=false,panX0=0,panY0=0,scrollX0=0,scrollY0=0;
-wrap.addEventListener('mousedown',e=>{if(e.target!==svg&&e.target!==wrap)return;panning=true;dragMoved=false;panX0=e.clientX;panY0=e.clientY;scrollX0=wrap.scrollLeft;scrollY0=wrap.scrollTop;wrap.style.cursor='grabbing'});
-window.addEventListener('mousemove',e=>{if(!panning)return;wrap.scrollLeft=scrollX0-(e.clientX-panX0);wrap.scrollTop=scrollY0-(e.clientY-panY0);if(Math.abs(e.clientX-panX0)>4||Math.abs(e.clientY-panY0)>4)dragMoved=true});
-window.addEventListener('mouseup',()=>{panning=false;wrap.style.cursor='grab'});
-// drag
-let elemDrag=null,labelWasDragged=false;
-svg.addEventListener('mousedown',e=>{if(e.target.tagName==='circle'&&e.target.parentElement.id==='handle-layer')return;const hit=e.target.closest('g.node[data-key],g.label[data-key],g.arrow[data-key]');if(!hit)return;e.stopPropagation();const p=svgPt(e.clientX,e.clientY);const{dx,dy}=getTranslate(hit);elemDrag={el:hit,sx:p.x,sy:p.y,dx,dy,kind:hit.classList[0]};labelWasDragged=false});
-window.addEventListener('mousemove',e=>{if(!elemDrag)return;const p=svgPt(e.clientX,e.clientY);const ndx=elemDrag.dx+(p.x-elemDrag.sx),ndy=elemDrag.dy+(p.y-elemDrag.sy);elemDrag.el.setAttribute('transform',`translate(${ndx.toFixed(1)},${ndy.toFixed(1)})`);if(Math.abs(p.x-elemDrag.sx)>2||Math.abs(p.y-elemDrag.sy)>2)labelWasDragged=true;if(elemDrag.kind==='arrow')updateHandlePositions(elemDrag.el);if(elemDrag.kind==='node')relinkArrowsForNode(elemDrag.el.dataset.key)});
-window.addEventListener('mouseup',()=>{if(!elemDrag)return;if(labelWasDragged){const{dx,dy}=getTranslate(elemDrag.el);const bucket=elemDrag.kind==='node'?'dsearch-nodes':elemDrag.kind==='label'?'dsearch-labels':'dsearch-arrows';const saved=JSON.parse(localStorage.getItem(bucket)||'{}');saved[elemDrag.el.dataset.key]={dx:+dx.toFixed(1),dy:+dy.toFixed(1)};localStorage.setItem(bucket,JSON.stringify(saved))}elemDrag=null});
-// path math
-function parsePath(d){const nums=s=>s.match(/[-\d.]+/g).map(Number);const m=d.match(/^M\s*([-\d.]+)\s+([-\d.]+)\s*([LQC])([\s\S]+)$/);if(!m)return null;const P0={x:+m[1],y:+m[2]},cmd=m[3],r=nums(m[4]);if(cmd==='L')return{type:'L',P0,P1:{x:r[0],y:r[1]}};if(cmd==='Q')return{type:'Q',P0,CP:{x:r[0],y:r[1]},P1:{x:r[2],y:r[3]}};return{type:'C',P0,C1:{x:r[0],y:r[1]},C2:{x:r[2],y:r[3]},P1:{x:r[4],y:r[5]}}}
-function pathMid(i){if(i.type==='L')return{x:(i.P0.x+i.P1.x)/2,y:(i.P0.y+i.P1.y)/2};if(i.type==='Q')return{x:(i.P0.x+2*i.CP.x+i.P1.x)/4,y:(i.P0.y+2*i.CP.y+i.P1.y)/4};return{x:(i.P0.x+3*i.C1.x+3*i.C2.x+i.P1.x)/8,y:(i.P0.y+3*i.C1.y+3*i.C2.y+i.P1.y)/8}}
-function bentPath(info,mx,my){const{P0,P1}=info;if(info.type==='L'||info.type==='Q')return`M ${P0.x} ${P0.y} Q ${fmt(2*mx-(P0.x+P1.x)/2)} ${fmt(2*my-(P0.y+P1.y)/2)} ${P1.x} ${P1.y}`;const mid=pathMid(info),dx=(mx-mid.x)*4/3,dy=(my-mid.y)*4/3;return`M ${P0.x} ${P0.y} C ${fmt(info.C1.x+dx)} ${fmt(info.C1.y+dy)}, ${fmt(info.C2.x+dx)} ${fmt(info.C2.y+dy)}, ${P1.x} ${P1.y}`}
-function moveEndpoint(info,which,mx,my){const P0=which==='start'?{x:mx,y:my}:info.P0,P1=which==='end'?{x:mx,y:my}:info.P1;if(info.type==='L')return`M ${fmt(P0.x)} ${fmt(P0.y)} L ${fmt(P1.x)} ${fmt(P1.y)}`;if(info.type==='Q')return`M ${fmt(P0.x)} ${fmt(P0.y)} Q ${fmt(info.CP.x)} ${fmt(info.CP.y)} ${fmt(P1.x)} ${fmt(P1.y)}`;return`M ${fmt(P0.x)} ${fmt(P0.y)} C ${fmt(info.C1.x)} ${fmt(info.C1.y)}, ${fmt(info.C2.x)} ${fmt(info.C2.y)}, ${fmt(P1.x)} ${fmt(P1.y)}`}
-// handles
-const handleLayer=document.getElementById('handle-layer');
-function showHandle(arrowEl){hideHandle();const path=arrowEl.querySelector('path'),info=path&&parsePath(path.getAttribute('d'));if(!info)return;const t=getTranslate(arrowEl);[{type:'start',pt:info.P0,fill:'#60c0f0',r:5},{type:'mid',pt:pathMid(info),fill:'#f4d35e',r:7},{type:'end',pt:info.P1,fill:'#60c0f0',r:5}].forEach(h=>{const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',fmt(h.pt.x+t.dx));c.setAttribute('cy',fmt(h.pt.y+t.dy));c.setAttribute('r',h.r);c.setAttribute('fill',h.fill);c.setAttribute('stroke','#222');c.setAttribute('stroke-width','1.5');c.style.cursor='crosshair';c.dataset.arrowKey=arrowEl.dataset.key;c.dataset.handleType=h.type;handleLayer.appendChild(c)})}
-function hideHandle(){while(handleLayer.firstChild)handleLayer.removeChild(handleLayer.firstChild)}
-function updateHandlePositions(arrowEl){const path=arrowEl.querySelector('path'),info=path&&parsePath(path.getAttribute('d'));if(!info)return;const t=getTranslate(arrowEl),map={start:info.P0,mid:pathMid(info),end:info.P1};handleLayer.querySelectorAll('circle').forEach(c=>{const pt=map[c.dataset.handleType];if(pt){c.setAttribute('cx',fmt(pt.x+t.dx));c.setAttribute('cy',fmt(pt.y+t.dy))}})}
+let panning = false, dragMoved = false, panX0=0, panY0=0, scrollX0=0, scrollY0=0;
+wrap.addEventListener('mousedown', e => {
+  if (e.target !== svg && e.target !== wrap) return;
+  panning=true; dragMoved=false;
+  panX0=e.clientX; panY0=e.clientY;
+  scrollX0=wrap.scrollLeft; scrollY0=wrap.scrollTop;
+  wrap.style.cursor='grabbing';
+});
+window.addEventListener('mousemove', e => {
+  if (!panning) return;
+  wrap.scrollLeft = scrollX0 - (e.clientX - panX0);
+  wrap.scrollTop  = scrollY0 - (e.clientY - panY0);
+  if (Math.abs(e.clientX-panX0)>4 || Math.abs(e.clientY-panY0)>4) dragMoved=true;
+});
+window.addEventListener('mouseup', () => { panning=false; wrap.style.cursor='grab'; });
+
+// drag nodes, labels, arrows
+let elemDrag=null, labelWasDragged=false;
+svg.addEventListener('mousedown', e => {
+  if (e.target.tagName==='circle' && e.target.parentElement.id==='handle-layer') return;
+  const hit = e.target.closest('g.node[data-key],g.label[data-key],g.arrow[data-key]');
+  if (!hit) return;
+  e.stopPropagation();
+  const p = svgPt(e.clientX, e.clientY);
+  const {dx,dy} = getTranslate(hit);
+  elemDrag = {el:hit, sx:p.x, sy:p.y, dx, dy, kind:hit.classList[0]};
+  labelWasDragged=false;
+});
+window.addEventListener('mousemove', e => {
+  if (!elemDrag) return;
+  const p = svgPt(e.clientX, e.clientY);
+  const ndx = elemDrag.dx + (p.x - elemDrag.sx);
+  const ndy = elemDrag.dy + (p.y - elemDrag.sy);
+  elemDrag.el.setAttribute('transform', `translate(${ndx.toFixed(1)},${ndy.toFixed(1)})`);
+  if (Math.abs(p.x-elemDrag.sx)>2 || Math.abs(p.y-elemDrag.sy)>2) labelWasDragged=true;
+  if (elemDrag.kind==='arrow') updateHandlePositions(elemDrag.el);
+});
+window.addEventListener('mouseup', () => {
+  if (!elemDrag) return;
+  if (labelWasDragged) {
+    const {dx,dy} = getTranslate(elemDrag.el);
+    const bucket = elemDrag.kind==='node' ? 'dsearch2-nodes'
+                 : elemDrag.kind==='label' ? 'dsearch2-labels' : 'dsearch2-arrows';
+    const saved = JSON.parse(localStorage.getItem(bucket)||'{}');
+    saved[elemDrag.el.dataset.key] = {dx:+dx.toFixed(1), dy:+dy.toFixed(1)};
+    localStorage.setItem(bucket, JSON.stringify(saved));
+  }
+  elemDrag=null;
+});
+
+// path math for bend handles
+function parsePath(d) {
+  const nums = s => s.match(/[-\d.]+/g).map(Number);
+  const m = d.match(/^M\s*([-\d.]+)\s+([-\d.]+)\s*([LQC])([\s\S]+)$/);
+  if (!m) return null;
+  const P0={x:+m[1],y:+m[2]}, cmd=m[3], r=nums(m[4]);
+  if (cmd==='L') return {type:'L', P0, P1:{x:r[0],y:r[1]}};
+  if (cmd==='Q') return {type:'Q', P0, CP:{x:r[0],y:r[1]}, P1:{x:r[2],y:r[3]}};
+  if (cmd==='C') return {type:'C', P0, C1:{x:r[0],y:r[1]}, C2:{x:r[2],y:r[3]}, P1:{x:r[4],y:r[5]}};
+  return null;
+}
+function pathMid(i) {
+  if (i.type==='L') return {x:(i.P0.x+i.P1.x)/2, y:(i.P0.y+i.P1.y)/2};
+  if (i.type==='Q') return {x:(i.P0.x+2*i.CP.x+i.P1.x)/4, y:(i.P0.y+2*i.CP.y+i.P1.y)/4};
+  return {x:(i.P0.x+3*i.C1.x+3*i.C2.x+i.P1.x)/8, y:(i.P0.y+3*i.C1.y+3*i.C2.y+i.P1.y)/8};
+}
+function bentPath(info, mx, my) {
+  const {P0,P1}=info;
+  if (info.type==='L'||info.type==='Q') {
+    return `M ${P0.x} ${P0.y} Q ${fmt(2*mx-(P0.x+P1.x)/2)} ${fmt(2*my-(P0.y+P1.y)/2)} ${P1.x} ${P1.y}`;
+  }
+  const mid=pathMid(info), dx=(mx-mid.x)*4/3, dy=(my-mid.y)*4/3;
+  return `M ${P0.x} ${P0.y} C ${fmt(info.C1.x+dx)} ${fmt(info.C1.y+dy)}, ${fmt(info.C2.x+dx)} ${fmt(info.C2.y+dy)}, ${P1.x} ${P1.y}`;
+}
+function moveEndpoint(info, which, mx, my) {
+  const P0 = which==='start' ? {x:mx,y:my} : info.P0;
+  const P1 = which==='end'   ? {x:mx,y:my} : info.P1;
+  if (info.type==='L') return `M ${fmt(P0.x)} ${fmt(P0.y)} L ${fmt(P1.x)} ${fmt(P1.y)}`;
+  if (info.type==='Q') return `M ${fmt(P0.x)} ${fmt(P0.y)} Q ${fmt(info.CP.x)} ${fmt(info.CP.y)} ${fmt(P1.x)} ${fmt(P1.y)}`;
+  return `M ${fmt(P0.x)} ${fmt(P0.y)} C ${fmt(info.C1.x)} ${fmt(info.C1.y)}, ${fmt(info.C2.x)} ${fmt(info.C2.y)}, ${fmt(P1.x)} ${fmt(P1.y)}`;
+}
+
+// bend handle display
+const handleLayer = document.getElementById('handle-layer');
+function showHandle(arrowEl) {
+  hideHandle();
+  const path=arrowEl.querySelector('path');
+  const info=path&&parsePath(path.getAttribute('d'));
+  if (!info) return;
+  const t=getTranslate(arrowEl);
+  [{type:'start',pt:info.P0,fill:'#60c0f0',r:5},
+   {type:'mid',pt:pathMid(info),fill:'#f4d35e',r:7},
+   {type:'end',pt:info.P1,fill:'#60c0f0',r:5}].forEach(h => {
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',fmt(h.pt.x+t.dx)); c.setAttribute('cy',fmt(h.pt.y+t.dy));
+    c.setAttribute('r',h.r); c.setAttribute('fill',h.fill);
+    c.setAttribute('stroke','#222'); c.setAttribute('stroke-width','1.5');
+    c.style.cursor='crosshair';
+    c.dataset.arrowKey=arrowEl.dataset.key; c.dataset.handleType=h.type;
+    handleLayer.appendChild(c);
+  });
+}
+function hideHandle() { while (handleLayer.firstChild) handleLayer.removeChild(handleLayer.firstChild); }
+function updateHandlePositions(arrowEl) {
+  const path=arrowEl.querySelector('path');
+  const info=path&&parsePath(path.getAttribute('d'));
+  if (!info) return;
+  const t=getTranslate(arrowEl);
+  const map={start:info.P0,mid:pathMid(info),end:info.P1};
+  handleLayer.querySelectorAll('circle').forEach(c => {
+    const pt=map[c.dataset.handleType];
+    if (pt){c.setAttribute('cx',fmt(pt.x+t.dx));c.setAttribute('cy',fmt(pt.y+t.dy));}
+  });
+}
+
 // bend drag
 let bendDrag=null;
-handleLayer.addEventListener('mousedown',e=>{if(e.target.tagName!=='circle')return;e.stopPropagation();e.preventDefault();const arrowEl=document.querySelector('g.arrow[data-key="'+e.target.dataset.arrowKey+'"]');if(!arrowEl)return;bendDrag={key:e.target.dataset.arrowKey,arrowEl,handleType:e.target.dataset.handleType,info:parsePath(arrowEl.querySelector('path').getAttribute('d'))}});
-window.addEventListener('mousemove',e=>{if(!bendDrag)return;const p=svgPt(e.clientX,e.clientY),t=getTranslate(bendDrag.arrowEl),mx=p.x-t.dx,my=p.y-t.dy;const newD=bendDrag.handleType==='mid'?bentPath(bendDrag.info,mx,my):moveEndpoint(bendDrag.info,bendDrag.handleType,mx,my);if(newD){setPathD(bendDrag.arrowEl,newD);updateHandlePositions(bendDrag.arrowEl)}},{capture:true});
-window.addEventListener('mouseup',()=>{if(!bendDrag)return;const d=bendDrag.arrowEl.querySelector('path').getAttribute('d');manualBends[bendDrag.key]=d;localStorage.setItem('dsearch-bends',JSON.stringify(manualBends));bendDrag=null},{capture:true});
+handleLayer.addEventListener('mousedown', e => {
+  if (e.target.tagName!=='circle') return;
+  e.stopPropagation(); e.preventDefault();
+  const arrowEl=document.querySelector('g.arrow[data-key="'+e.target.dataset.arrowKey+'"]');
+  if (!arrowEl) return;
+  bendDrag={key:e.target.dataset.arrowKey, arrowEl,
+            handleType:e.target.dataset.handleType,
+            info:parsePath(arrowEl.querySelector('path').getAttribute('d'))};
+});
+window.addEventListener('mousemove', e => {
+  if (!bendDrag) return;
+  const p=svgPt(e.clientX,e.clientY);
+  const t=getTranslate(bendDrag.arrowEl);
+  const mx=p.x-t.dx, my=p.y-t.dy;
+  bendDrag.lastMx=mx; bendDrag.lastMy=my;
+  const newD = bendDrag.handleType==='mid' ? bentPath(bendDrag.info, mx, my)
+                                           : moveEndpoint(bendDrag.info, bendDrag.handleType, mx, my);
+  if (newD){setPathD(bendDrag.arrowEl,newD);updateHandlePositions(bendDrag.arrowEl);}
+},{capture:true});
+window.addEventListener('mouseup', () => {
+  if (!bendDrag) return;
+  const d=bendDrag.arrowEl.querySelector('path').getAttribute('d');
+  manualBends[bendDrag.key]=d;
+  localStorage.setItem('dsearch2-bends',JSON.stringify(manualBends));
+  bendDrag=null;
+},{capture:true});
 
-// AUTO_LINKS
-const AUTO_LINKS={
-  a_query_dsearch:{src:'QUERY',    srcSide:'bottom',dst:'DSEARCH',   dstSide:'top'},
-  a_dsearch_dansw:{src:'DSEARCH',  srcSide:'right', dst:'DANSW',     dstSide:'left'},
-  a_dansw_step1:  {src:'DANSW',    srcSide:'bottom',dst:'STEP1',     dstSide:'top'},
-  a_step1_step2:  {src:'STEP1',    srcSide:'bottom',dst:'STEP2',     dstSide:'top'},
-  a_step2_step3:  {src:'STEP2',    srcSide:'bottom',dst:'STEP3',     dstSide:'top'},
-  a_step3_step4:  {src:'STEP3',    srcSide:'bottom',dst:'STEP4',     dstSide:'top'},
-  a_step4_step5:  {src:'STEP4',    srcSide:'bottom',dst:'STEP5',     dstSide:'top'},
-  a_step5_step6:  {src:'STEP5',    srcSide:'bottom',dst:'STEP6',     dstSide:'top'},
-  a_step2_step2b: {src:'STEP2',    srcSide:'right', dst:'STEP2B',    dstSide:'left'},
-  a_step2_chroma: {src:'STEP2',    srcSide:'right', dst:'CHROMADB',  dstSide:'left'},
-  a_multi_faiss:  {src:'MULTI',    srcSide:'right', dst:'FAISS_IDX', dstSide:'left'},
-  a_step1_claude: {src:'STEP1',    srcSide:'right', dst:'CLAUDE_SVC',dstSide:'auto'},
-  a_step4_claude: {src:'STEP4',    srcSide:'right', dst:'CLAUDE_SVC',dstSide:'auto'},
-  a_step6_claude: {src:'STEP6',    srcSide:'right', dst:'CLAUDE_SVC',dstSide:'auto'},
-  a_step2_cohere: {src:'STEP2',    srcSide:'right', dst:'COHERE_SVC',dstSide:'left'},
-};
-const AUTO_LINKS_DEFAULTS=JSON.parse(JSON.stringify(AUTO_LINKS));
+// auto-relink (not used here — static layout, but engine supports it)
+const AUTO_LINKS = {};
+const AUTO_LINKS_DEFAULTS = JSON.parse(JSON.stringify(AUTO_LINKS));
+function nodeRect(key) {
+  const g=document.querySelector('g.node[data-key="'+key+'"]');
+  if (!g) return null;
+  const rect=g.querySelector('rect.nb');
+  if (!rect) return null;
+  const t=getTranslate(g);
+  return {x:t.dx+(+rect.getAttribute('x')||0), y:t.dy+(+rect.getAttribute('y')||0),
+          w:+rect.getAttribute('width'), h:+rect.getAttribute('height')};
+}
+function relinkArrow(key) { if (manualBends[key]) return; }
+function relinkArrowsForNode(nodeKey) {}
+function relinkAllAutoLinks() {}
 
-function nodeRect(key){const g=document.querySelector('g.node[data-key="'+key+'"]');if(!g)return null;const rect=g.querySelector('rect.nb');if(!rect)return null;const t=getTranslate(g);return{x:t.dx+(+rect.getAttribute('x')||0),y:t.dy+(+rect.getAttribute('y')||0),w:+rect.getAttribute('width'),h:+rect.getAttribute('height')}}
-function edgePoint(r,side){if(side==='top')return{x:r.x+r.w/2,y:r.y};if(side==='bottom')return{x:r.x+r.w/2,y:r.y+r.h};if(side==='left')return{x:r.x,y:r.y+r.h/2};return{x:r.x+r.w,y:r.y+r.h/2}}
-function sideNormal(s){return s==='top'?[0,-1]:s==='bottom'?[0,1]:s==='left'?[-1,0]:[1,0]}
-function pickFacingSide(myR,otherR){const dx=(otherR.x+otherR.w/2)-(myR.x+myR.w/2),dy=(otherR.y+otherR.h/2)-(myR.y+myR.h/2);return Math.abs(dy)>Math.abs(dx)?(dy>0?'bottom':'top'):(dx>0?'right':'left')}
-function relinkArrow(key){if(manualBends[key])return;const link=AUTO_LINKS[key];if(!link)return;const srcR=nodeRect(link.src),dstR=nodeRect(link.dst);if(!srcR||!dstR)return;const ss=link.srcSide==='auto'?pickFacingSide(srcR,dstR):link.srcSide,ds=link.dstSide==='auto'?pickFacingSide(dstR,srcR):link.dstSide;const p0=edgePoint(srcR,ss),p1=edgePoint(dstR,ds),sn=sideNormal(ss),dn=sideNormal(ds);const k=Math.max(40,Math.min(220,Math.hypot(p1.x-p0.x,p1.y-p0.y)*0.4));const d=`M ${fmt(p0.x)} ${fmt(p0.y)} C ${fmt(p0.x+sn[0]*k)} ${fmt(p0.y+sn[1]*k)}, ${fmt(p1.x+dn[0]*k)} ${fmt(p1.y+dn[1]*k)}, ${fmt(p1.x)} ${fmt(p1.y)}`;const arrowEl=document.querySelector('g.arrow[data-key="'+key+'"]');if(!arrowEl)return;arrowEl.removeAttribute('transform');setPathD(arrowEl,d);positionLabelsForArrow(key)}
-function relinkArrowsForNode(nodeKey){for(const[k,l]of Object.entries(AUTO_LINKS))if(l.src===nodeKey||l.dst===nodeKey)relinkArrow(k)}
-function relinkAllAutoLinks(){for(const k of Object.keys(AUTO_LINKS))relinkArrow(k)}
+// floating labels
+const LABEL_LINKS = {};
+function positionLabel(labelKey) {}
+function positionLabelsForArrow(arrowKey) {}
+function positionAllLabels() {}
 
-const LABEL_LINKS={};
-function positionLabel(lk){const link=LABEL_LINKS[lk];if(!link)return;const ae=document.querySelector('g.arrow[data-key="'+link.arrow+'"]');if(!ae)return;const p=ae.querySelector('path'),info=p&&parsePath(p.getAttribute('d'));if(!info)return;const mid=pathMid(info),t=getTranslate(ae),le=document.querySelector('g.label[data-key="'+lk+'"]'),txt=le&&le.querySelector('text');if(!txt)return;txt.setAttribute('x',fmt(mid.x+t.dx));txt.setAttribute('y',fmt(mid.y+t.dy+(link.dy||0)));txt.setAttribute('text-anchor','middle')}
-function positionLabelsForArrow(ak){for(const[lk,l]of Object.entries(LABEL_LINKS))if(l.arrow===ak)positionLabel(lk)}
-function positionAllLabels(){for(const k of Object.keys(LABEL_LINKS))positionLabel(k)}
-
-// click → panel
+// click → info panel
 const panel=document.getElementById('panel');
-function showPanel(key){const d=DATA[key];if(!d){panel.innerHTML='<div class="hint">No info for '+key+'</div>';return}let h='<h2>'+d.title+'</h2>';if(d.desc)h+='<p>'+d.desc+'</p>';if(d.props&&Object.keys(d.props).length){h+='<div class="key">Properties</div><table>';for(const[k,v]of Object.entries(d.props))h+='<tr><td>'+k+'</td><td>'+v+'</td></tr>';h+='</table>'}panel.innerHTML=h}
+function showPanel(key) {
+  const d=DATA[key];
+  if (!d){panel.innerHTML='<div class="hint">No info for '+key+'</div>';return;}
+  let h='<h2>'+d.title+'</h2>';
+  if (d.desc) h+='<p>'+d.desc+'</p>';
+  if (d.props&&Object.keys(d.props).length){
+    h+='<div class="key">Properties</div><table>';
+    for (const [k,v] of Object.entries(d.props)) h+='<tr><td>'+k+'</td><td>'+v+'</td></tr>';
+    h+='</table>';
+  }
+  panel.innerHTML=h;
+}
 let selectedArrow=null;
-svg.addEventListener('click',e=>{if(dragMoved||labelWasDragged){dragMoved=false;labelWasDragged=false;return}const hit=e.target.closest('g.node[data-key],g.arrow[data-key]');if(selectedArrow){selectedArrow.classList.remove('sel');selectedArrow=null;hideHandle()}document.querySelectorAll('g.node.sel').forEach(g=>g.classList.remove('sel'));if(!hit){panel.innerHTML='<div class="hint">Click any box or arrow to see details.</div>';return}hit.classList.add('sel');showPanel(hit.dataset.key);if(hit.classList.contains('arrow')){selectedArrow=hit;showHandle(hit)}});
+svg.addEventListener('click', e => {
+  if (dragMoved||labelWasDragged){dragMoved=false;labelWasDragged=false;return;}
+  const hit=e.target.closest('g.node[data-key],g.arrow[data-key]');
+  if (selectedArrow){selectedArrow.classList.remove('sel');selectedArrow=null;hideHandle();}
+  document.querySelectorAll('g.node.sel').forEach(g=>g.classList.remove('sel'));
+  if (!hit){panel.innerHTML='<div class="hint">Click any box or arrow to see details.</div>';return;}
+  hit.classList.add('sel');
+  showPanel(hit.dataset.key);
+  if (hit.classList.contains('arrow')){selectedArrow=hit;showHandle(hit);}
+});
 
-// persistence
-function snapshotLayout(){return{nodes:JSON.parse(localStorage.getItem('dsearch-nodes')||'{}'),labels:JSON.parse(localStorage.getItem('dsearch-labels')||'{}'),arrows:JSON.parse(localStorage.getItem('dsearch-arrows')||'{}'),bends:JSON.parse(localStorage.getItem('dsearch-bends')||'{}')}}
-function applySnapshot(s){if(!s)return;if(s.nodes)localStorage.setItem('dsearch-nodes',JSON.stringify(s.nodes));if(s.labels)localStorage.setItem('dsearch-labels',JSON.stringify(s.labels));if(s.arrows)localStorage.setItem('dsearch-arrows',JSON.stringify(s.arrows));if(s.bends)localStorage.setItem('dsearch-bends',JSON.stringify(s.bends));for(const[bucket,sel]of[['nodes','g.node[data-key="'],['labels','g.label[data-key="'],['arrows','g.arrow[data-key="']]){for(const[key,p]of Object.entries(s[bucket]||{})){const g=document.querySelector(sel+key+'"]');if(g)g.setAttribute('transform',`translate(${p.dx},${p.dy})`)}}manualBends=Object.assign({},s.bends||{});for(const[k,d]of Object.entries(manualBends)){const g=document.querySelector('g.arrow[data-key="'+k+'"]');if(g)setPathD(g,d)}relinkAllAutoLinks();positionAllLabels()}
-(function(){for(const bucket of['dsearch-nodes','dsearch-labels','dsearch-arrows']){const saved=JSON.parse(localStorage.getItem(bucket)||'{}'),sel=bucket.endsWith('nodes')?'g.node[data-key="':bucket.endsWith('labels')?'g.label[data-key="':'g.arrow[data-key="';for(const[key,p]of Object.entries(saved)){const g=document.querySelector(sel+key+'"]');if(g)g.setAttribute('transform',`translate(${p.dx},${p.dy})`)}}manualBends=JSON.parse(localStorage.getItem('dsearch-bends')||'{}');for(const[k,d]of Object.entries(manualBends)){const g=document.querySelector('g.arrow[data-key="'+k+'"]');if(g)setPathD(g,d)}relinkAllAutoLinks();positionAllLabels()})();
-const _si=localStorage.setItem.bind(localStorage);localStorage.setItem=function(k,v){_si(k,v);if(k.startsWith('dsearch-')&&k!=='dsearch-undo'&&k!=='dsearch-autosave'){_si('dsearch-autosave',JSON.stringify(snapshotLayout()));const si=document.getElementById('saved-ind');if(si){si.textContent='✓ saved '+new Date().toLocaleTimeString();si.style.opacity='1';clearTimeout(si._t);si._t=setTimeout(()=>{si.style.opacity='.45'},1500)}}};
-function resetAll(){if(!confirm('Reset layout? Current positions will be lost.\n("Undo reset" restores them.)'))return;localStorage.setItem('dsearch-undo',JSON.stringify(snapshotLayout()));document.querySelectorAll('g.node[data-key],g.label[data-key],g.arrow[data-key]').forEach(g=>g.removeAttribute('transform'));for(const[k,d]of Object.entries(origPaths)){const g=document.querySelector('g.arrow[data-key="'+k+'"]');if(g)setPathD(g,d)}['dsearch-nodes','dsearch-labels','dsearch-arrows','dsearch-bends','dsearch-sides'].forEach(k=>localStorage.removeItem(k));manualBends={};for(const k of Object.keys(AUTO_LINKS_DEFAULTS)){AUTO_LINKS[k].srcSide=AUTO_LINKS_DEFAULTS[k].srcSide;AUTO_LINKS[k].dstSide=AUTO_LINKS_DEFAULTS[k].dstSide}relinkAllAutoLinks();positionAllLabels();hideHandle();if(selectedArrow){selectedArrow.classList.remove('sel');selectedArrow=null}document.querySelectorAll('g.node.sel').forEach(g=>g.classList.remove('sel'))}
-function undoReset(){const raw=localStorage.getItem('dsearch-undo');if(!raw){alert('No undo snapshot.');return}applySnapshot(JSON.parse(raw))}
-function exportLayout(){const blob=new Blob([JSON.stringify(snapshotLayout(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='dsearch-layout.json';document.body.appendChild(a);a.click();a.remove()}
-function importLayout(ev){const file=ev.target.files&&ev.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{localStorage.setItem('dsearch-undo',JSON.stringify(snapshotLayout()));applySnapshot(JSON.parse(reader.result))}catch(e){alert('Bad JSON: '+e.message)}};reader.readAsText(file);ev.target.value=''}
-function applyGrid(){const o=document.getElementById('overview').style.display!=='none',r=document.getElementById('right').style.display!=='none';document.body.style.gridTemplateColumns=`${o?'290px':'0'} 1fr ${r?'350px':'0'}`}
-function savePanels(){localStorage.setItem('dsearch-panels',JSON.stringify({overview:document.getElementById('overview').style.display!=='none',details:document.getElementById('right').style.display!=='none'}))}
-function toggleOverview(){const o=document.getElementById('overview');o.style.display=(o.style.display==='none')?'':'none';applyGrid();savePanels()}
-function toggleDetails(){const r=document.getElementById('right');r.style.display=(r.style.display==='none')?'':'none';applyGrid();savePanels()}
-(function(){const p=JSON.parse(localStorage.getItem('dsearch-panels')||'{}');if(p.overview===false)document.getElementById('overview').style.display='none';if(p.details===false)document.getElementById('right').style.display='none';applyGrid()})();
+// localStorage persistence
+function snapshotLayout() {
+  return {
+    nodes:  JSON.parse(localStorage.getItem('dsearch2-nodes') ||'{}'),
+    labels: JSON.parse(localStorage.getItem('dsearch2-labels')||'{}'),
+    arrows: JSON.parse(localStorage.getItem('dsearch2-arrows')||'{}'),
+    bends:  JSON.parse(localStorage.getItem('dsearch2-bends') ||'{}'),
+  };
+}
+function applySnapshot(s) {
+  if (!s) return;
+  if (s.nodes)  localStorage.setItem('dsearch2-nodes',  JSON.stringify(s.nodes));
+  if (s.labels) localStorage.setItem('dsearch2-labels', JSON.stringify(s.labels));
+  if (s.arrows) localStorage.setItem('dsearch2-arrows', JSON.stringify(s.arrows));
+  if (s.bends)  localStorage.setItem('dsearch2-bends',  JSON.stringify(s.bends));
+  for (const [bucket,sel] of [['nodes','g.node[data-key="'],['labels','g.label[data-key="'],['arrows','g.arrow[data-key="']]) {
+    for (const [key,p] of Object.entries(s[bucket]||{})) {
+      const g=document.querySelector(sel+key+'"]');
+      if (g) g.setAttribute('transform',`translate(${p.dx},${p.dy})`);
+    }
+  }
+  manualBends=Object.assign({},s.bends||{});
+  for (const [k,d] of Object.entries(manualBends)) {
+    const g=document.querySelector('g.arrow[data-key="'+k+'"]');
+    if (g) setPathD(g,d);
+  }
+}
+
+// restore on load
+(function() {
+  for (const bucket of ['dsearch2-nodes','dsearch2-labels','dsearch2-arrows']) {
+    const saved=JSON.parse(localStorage.getItem(bucket)||'{}');
+    const sel=bucket.endsWith('nodes')?'g.node[data-key="':bucket.endsWith('labels')?'g.label[data-key="':'g.arrow[data-key="';
+    for (const [key,p] of Object.entries(saved)) {
+      const g=document.querySelector(sel+key+'"]');
+      if (g) g.setAttribute('transform',`translate(${p.dx},${p.dy})`);
+    }
+  }
+  manualBends=JSON.parse(localStorage.getItem('dsearch2-bends')||'{}');
+  for (const [k,d] of Object.entries(manualBends)) {
+    const g=document.querySelector('g.arrow[data-key="'+k+'"]');
+    if (g) setPathD(g,d);
+  }
+})();
+
+// autosave indicator
+const _setItemOrig=localStorage.setItem.bind(localStorage);
+localStorage.setItem=function(k,v){
+  _setItemOrig(k,v);
+  if (k.startsWith('dsearch2-')&&k!=='dsearch2-undo'&&k!=='dsearch2-autosave') {
+    _setItemOrig('dsearch2-autosave',JSON.stringify(snapshotLayout()));
+    const si=document.getElementById('saved-ind');
+    if (si){ si.textContent='✓ saved '+new Date().toLocaleTimeString(); si.style.opacity='1';
+             clearTimeout(si._t); si._t=setTimeout(()=>{ si.style.opacity='.45'; },1500); }
+  }
+};
+
+// toolbar
+function resetAll() {
+  if (!confirm('Reset layout?')) return;
+  localStorage.setItem('dsearch2-undo',JSON.stringify(snapshotLayout()));
+  document.querySelectorAll('g.node[data-key],g.label[data-key],g.arrow[data-key]').forEach(g=>g.removeAttribute('transform'));
+  for (const [k,d] of Object.entries(origPaths)){const g=document.querySelector('g.arrow[data-key="'+k+'"]');if(g)setPathD(g,d);}
+  ['dsearch2-nodes','dsearch2-labels','dsearch2-arrows','dsearch2-bends'].forEach(k=>localStorage.removeItem(k));
+  manualBends={};
+  hideHandle();
+  if (selectedArrow){selectedArrow.classList.remove('sel');selectedArrow=null;}
+  document.querySelectorAll('g.node.sel').forEach(g=>g.classList.remove('sel'));
+}
+function undoReset() {
+  const raw=localStorage.getItem('dsearch2-undo');
+  if (!raw){alert('No undo snapshot.');return;}
+  applySnapshot(JSON.parse(raw));
+}
+function exportLayout() {
+  const blob=new Blob([JSON.stringify(snapshotLayout(),null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='dsearch2-layout.json'; document.body.appendChild(a); a.click(); a.remove();
+}
+function importLayout(ev) {
+  const file=ev.target.files&&ev.target.files[0]; if (!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try { localStorage.setItem('dsearch2-undo',JSON.stringify(snapshotLayout()));
+          applySnapshot(JSON.parse(reader.result));
+    } catch(e){alert('Bad JSON: '+e.message);}
+  };
+  reader.readAsText(file); ev.target.value='';
+}
+
+// panel show/hide
+function isVisible(el){ return el.style.display!=='none'; }
+function applyGrid(){
+  const ov=document.getElementById('overview'), rt=document.getElementById('right');
+  const o=isVisible(ov), r=isVisible(rt);
+  const cols = [];
+  if (o) cols.push('300px');
+  cols.push('1fr');
+  if (r) cols.push('360px');
+  document.body.style.gridTemplateColumns = cols.join(' ');
+  document.querySelector('[onclick*="toggleOverview"]').textContent = o ? '⮜ Hide overview' : '⮞ Show overview';
+  document.querySelector('[onclick*="toggleDetails"]').textContent = r ? 'Hide details ⮞' : '⮜ Show details';
+}
+function savePanels(){
+  localStorage.setItem('dsearch2-panels',JSON.stringify({
+    overview:isVisible(document.getElementById('overview')),
+    details: isVisible(document.getElementById('right')) }));
+}
+function toggleOverview(){
+  const o=document.getElementById('overview');
+  if (isVisible(o)) { o.style.display='none'; } else { o.style.display=''; }
+  applyGrid(); savePanels();
+}
+function toggleDetails(){
+  const r=document.getElementById('right');
+  if (isVisible(r)) { r.style.display='none'; } else { r.style.display=''; }
+  applyGrid(); savePanels();
+}
+(function(){ const p=JSON.parse(localStorage.getItem('dsearch2-panels')||'{}');
+  if (p.overview===false) document.getElementById('overview').style.display='none';
+  if (p.details===false)  document.getElementById('right').style.display='none';
+  applyGrid(); })();
 </script>
+
 </body>
 </html>
