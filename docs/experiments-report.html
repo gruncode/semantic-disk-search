@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dsearch2 — Experiments &amp; Architecture Report</title>
+<style>
+:root {
+  --bg:#0e1626; --panel:#17223b; --ink:#e9eef7; --muted:#95a4c2; --line:#6b7a99;
+  --green:#5db890; --red:#e06070; --yellow:#f4d35e; --blue:#6ea8fe; --accent:#b0a0e0;
+  --teal:#74c0b8; --surface:rgba(23,34,59,.6); --border:rgba(255,255,255,.08);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:-apple-system,system-ui,'Segoe UI',sans-serif; background:var(--bg); color:var(--ink);
+       display:grid; grid-template-columns:280px 1fr; min-height:100vh; }
+
+/* ─── LEFT NAV ───────────────────────────────── */
+#nav { background:rgba(14,22,38,.95); border-right:1px solid var(--border); padding:16px 12px;
+       overflow-y:auto; position:sticky; top:0; height:100vh; }
+#nav h2 { font-size:15px; color:var(--accent); margin-bottom:12px; }
+#nav a { display:block; padding:6px 10px; margin:2px 0; border-radius:6px; color:var(--muted);
+         text-decoration:none; font-size:12.5px; line-height:1.4; transition:all .15s; }
+#nav a:hover { background:rgba(255,255,255,.06); color:var(--ink); }
+#nav a.active { background:rgba(176,160,224,.12); color:var(--accent); font-weight:600; }
+#nav .section-label { font-size:10px; text-transform:uppercase; letter-spacing:.08em;
+                      color:var(--muted); margin:14px 0 4px 10px; opacity:.7; }
+
+/* ─── MAIN CONTENT ───────────────────────────── */
+main { padding:28px 36px; max-width:960px; overflow-y:auto; }
+h1 { color:var(--accent); font-size:1.7rem; margin-bottom:4px; }
+.subtitle { color:var(--muted); font-size:.92rem; margin-bottom:28px; }
+h2 { color:var(--blue); font-size:1.2rem; margin:32px 0 12px; padding-bottom:6px;
+     border-bottom:1px solid var(--border); scroll-margin-top:20px; }
+h3 { color:var(--teal); font-size:1rem; margin:18px 0 8px; }
+p, li { line-height:1.6; margin-bottom:8px; font-size:.92rem; }
+ul { padding-left:1.4rem; }
+a { color:var(--blue); }
+
+/* ─── TABLES ─────────────────────────────────── */
+table { width:100%; border-collapse:collapse; margin:10px 0 18px; font-size:.88rem; }
+th { background:var(--panel); color:var(--accent); padding:7px 10px; text-align:left;
+     border-bottom:2px solid rgba(255,255,255,.12); font-size:.82rem; }
+td { padding:6px 10px; border-bottom:1px solid var(--border); }
+tr:hover td { background:rgba(110,168,254,.04); }
+.num { font-family:'Consolas','SF Mono',monospace; }
+.hit { color:var(--green); font-weight:600; }
+.miss { color:var(--red); }
+.warn { color:var(--yellow); }
+.dim { color:var(--muted); }
+
+/* ─── CARDS & BADGES ─────────────────────────── */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+        padding:14px 18px; margin:14px 0; }
+.card-title { color:var(--accent); font-weight:600; margin-bottom:8px; font-size:.95rem; }
+.verdict { display:inline-block; padding:2px 10px; border-radius:4px; font-weight:600; font-size:.82rem; }
+.v-dead { background:rgba(224,96,112,.15); color:var(--red); }
+.v-live { background:rgba(93,184,144,.15); color:var(--green); }
+.v-warn { background:rgba(244,211,94,.15); color:var(--yellow); }
+.v-info { background:rgba(110,168,254,.15); color:var(--blue); }
+
+/* ─── SUMMARY BOX ────────────────────────────── */
+.summary-box { background:linear-gradient(135deg, rgba(176,160,224,.08), rgba(110,168,254,.08));
+               border:1px solid rgba(176,160,224,.25); border-radius:12px; padding:18px 22px; margin:18px 0; }
+.summary-box h3 { color:var(--accent); margin-top:0; }
+
+/* ─── BAR CHARTS ─────────────────────────────── */
+.bar { height:26px; border-radius:5px; display:flex; overflow:hidden; margin:6px 0; background:rgba(255,255,255,.04); }
+.bar-fill { height:100%; display:flex; align-items:center; justify-content:center;
+            font-size:.72rem; font-weight:700; color:#0e1626; min-width:1px; transition:width .4s; }
+.bar-hit { background:var(--green); }
+.bar-miss { background:var(--red); }
+.bar-neutral { background:var(--muted); }
+.bar-blue { background:var(--blue); }
+
+/* ─── HORIZONTAL BAR CHART ───────────────────── */
+.hbar-row { display:flex; align-items:center; gap:10px; margin:4px 0; }
+.hbar-label { width:160px; font-size:.82rem; color:var(--muted); text-align:right; flex-shrink:0; }
+.hbar-track { flex:1; height:20px; background:rgba(255,255,255,.03); border-radius:4px; overflow:hidden; position:relative; }
+.hbar-fill { height:100%; border-radius:4px; display:flex; align-items:center; padding-left:8px;
+             font-size:.72rem; font-weight:600; color:#0e1626; transition:width .5s; }
+.hbar-val { position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:.78rem; color:var(--muted); }
+
+/* ─── SVG DIAGRAM ────────────────────────────── */
+.diagram-wrap { background:var(--surface); border-radius:12px; padding:12px; margin:16px 0;
+                overflow-x:auto; border:1px solid var(--border); }
+.diagram-wrap svg { display:block; width:100%; height:auto; }
+
+/* ─── TIMELINE ───────────────────────────────── */
+.timeline { position:relative; padding-left:28px; margin:16px 0; }
+.timeline::before { content:''; position:absolute; left:8px; top:0; bottom:0; width:2px; background:var(--border); }
+.tl-item { position:relative; margin-bottom:16px; }
+.tl-item::before { content:''; position:absolute; left:-24px; top:6px; width:12px; height:12px;
+                   border-radius:50%; border:2px solid var(--accent); background:var(--bg); }
+.tl-item.tl-green::before { border-color:var(--green); background:rgba(93,184,144,.2); }
+.tl-item.tl-red::before { border-color:var(--red); background:rgba(224,96,112,.2); }
+.tl-item.tl-yellow::before { border-color:var(--yellow); background:rgba(244,211,94,.2); }
+.tl-date { font-size:.78rem; color:var(--muted); }
+.tl-title { font-weight:600; font-size:.92rem; margin:2px 0 4px; }
+.tl-body { font-size:.85rem; color:var(--muted); line-height:1.5; }
+
+/* ─── FINDING CALLOUT ────────────────────────── */
+.finding { border-left:3px solid var(--accent); padding:10px 14px; margin:12px 0;
+           background:rgba(176,160,224,.05); border-radius:0 8px 8px 0; }
+.finding strong { color:var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ LEFT NAV ═══════════════ -->
+<div id="nav">
+  <h2>dsearch2 Report</h2>
+  <div class="section-label">Overview</div>
+  <a href="#top">Current State</a>
+  <a href="#arch">Architecture</a>
+  <div class="section-label">Experiments</div>
+  <a href="#exp1">1. Weight Tuning</a>
+  <a href="#exp2">2. Reranker</a>
+  <a href="#exp3">3. BGE-M3 Pilot</a>
+  <a href="#exp4">4. BGE-M3 Integration</a>
+  <a href="#exp5">5. Recoll BM25</a>
+  <a href="#exp6">6. Alias Expansion</a>
+  <a href="#exp7">7. HyDE (Ollama)</a>
+  <a href="#exp8">8. FTS5 Grid Search</a>
+  <div class="section-label">Analysis</div>
+  <a href="#saturation">Lexical Saturation</a>
+  <a href="#timeline">Timeline</a>
+  <a href="#findings">Key Findings</a>
+  <a href="#next">What's Next</a>
+</div>
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<main>
+
+<!-- ─── HEADER ─── -->
+<div id="top">
+<h1>dsearch2 Experiments Report</h1>
+<p class="subtitle">Semantic disk search · 950K chunks · 128K files · ChromaDB + BGE-M3 + SQLite · June 2026</p>
+</div>
+
+<!-- ═══ CURRENT STATE ═══ -->
+<div class="summary-box">
+<h3>Production Config: v7.2 (4-arm RRF)</h3>
+<table>
+<tr><th>Metric</th><th>Value</th><th>Note</th></tr>
+<tr><td>Total chunks</td><td class="num">950,429</td><td>1000-char fixed chunking</td></tr>
+<tr><td>Files tracked</td><td class="num">128,322</td><td>3 stores: Cohere ChromaDB + BGE ChromaDB + SQLite</td></tr>
+<tr><td>Recall@20 (golden v1)</td><td class="num hit">38/70 (54.3%)</td><td>Stress-test set: 38 easy + 32 hard</td></tr>
+<tr><td>Easy subset</td><td class="num hit">30/38 (78.9%)</td><td>Realistic daily-use recall</td></tr>
+<tr><td>Hard subset</td><td class="num">8/32 (25.0%)</td><td>Deliberately adversarial queries</td></tr>
+</table>
+<div class="bar" style="width:100%">
+  <div class="bar-fill bar-hit" style="width:54.3%">38 hits (54.3%)</div>
+  <div class="bar-fill bar-miss" style="width:45.7%">32 miss</div>
+</div>
+</div>
+
+<!-- ═══ ARCHITECTURE DIAGRAM ═══ -->
+<h2 id="arch">Architecture: 5-Arm RRF Pipeline</h2>
+<p>Reciprocal Rank Fusion (RRF) merges ranked lists from multiple retrieval arms. Score = &Sigma; W/(k+rank) where k=60.</p>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 880 520" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9aa6c2"/>
+    </marker>
+    <marker id="arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5db890"/>
+    </marker>
+    <marker id="arr-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#e06070"/>
+    </marker>
+  </defs>
+
+  <!-- Background regions -->
+  <rect x="220" y="40" width="440" height="395" rx="14" fill="rgba(23,34,59,.4)" stroke="rgba(255,255,255,.06)"/>
+  <text x="440" y="66" text-anchor="middle" fill="#95a4c2" font-size="11" font-weight="600" letter-spacing=".06em">RETRIEVAL ARMS</text>
+
+  <!-- Query input -->
+  <rect x="20" y="210" width="150" height="50" rx="10" fill="rgba(110,168,254,.12)" stroke="#6ea8fe"/>
+  <text x="95" y="232" text-anchor="middle" fill="#e9eef7" font-weight="600" font-size="13">Query</text>
+  <text x="95" y="248" text-anchor="middle" fill="#95a4c2" font-size="10">+ alias expansion</text>
+
+  <!-- Arrow: Query → fork point -->
+  <path d="M 170 235 L 220 235" stroke="#6b7a99" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+  <!-- Arm 1: BGE-M3 Vector -->
+  <rect x="240" y="90" width="180" height="50" rx="8" fill="rgba(93,184,144,.12)" stroke="#5db890"/>
+  <text x="330" y="113" text-anchor="middle" fill="#e9eef7" font-weight="600" font-size="12">BGE-M3 Vector</text>
+  <text x="330" y="130" text-anchor="middle" fill="#5db890" font-size="10" font-weight="600">W = 1.0 ✓</text>
+
+  <!-- Arm 2: TF-IDF -->
+  <rect x="240" y="160" width="180" height="50" rx="8" fill="rgba(93,184,144,.12)" stroke="#5db890"/>
+  <text x="330" y="183" text-anchor="middle" fill="#e9eef7" font-weight="600" font-size="12">TF-IDF Lexical</text>
+  <text x="330" y="200" text-anchor="middle" fill="#5db890" font-size="10" font-weight="600">W = 1.0 ✓</text>
+
+  <!-- Arm 3: Recoll Path -->
+  <rect x="240" y="230" width="180" height="50" rx="8" fill="rgba(93,184,144,.12)" stroke="#5db890"/>
+  <text x="330" y="253" text-anchor="middle" fill="#e9eef7" font-weight="600" font-size="12">Recoll Path BM25</text>
+  <text x="330" y="270" text-anchor="middle" fill="#5db890" font-size="10" font-weight="600">W = 1.5 ✓</text>
+
+  <!-- Arm 4: Recoll Content (disabled) -->
+  <rect x="240" y="300" width="180" height="50" rx="8" fill="rgba(224,96,112,.06)" stroke="rgba(224,96,112,.3)" stroke-dasharray="4 3"/>
+  <text x="330" y="323" text-anchor="middle" fill="#95a4c2" font-size="12">Recoll Content</text>
+  <text x="330" y="340" text-anchor="middle" fill="#e06070" font-size="10">W = 0.0 (noise)</text>
+
+  <!-- Arm 5: FTS5 (disabled) -->
+  <rect x="240" y="370" width="180" height="50" rx="8" fill="rgba(224,96,112,.06)" stroke="rgba(224,96,112,.3)" stroke-dasharray="4 3"/>
+  <text x="330" y="393" text-anchor="middle" fill="#95a4c2" font-size="12">SQLite FTS5</text>
+  <text x="330" y="410" text-anchor="middle" fill="#e06070" font-size="10">W = 0.0 (saturated)</text>
+
+  <!-- Fork arrows from query to each arm -->
+  <path d="M 220 225 Q 230 115 240 115" stroke="#6b7a99" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+  <path d="M 220 230 Q 230 185 240 185" stroke="#6b7a99" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+  <path d="M 220 235 L 240 255" stroke="#6b7a99" stroke-width="1.2" fill="none" marker-end="url(#arr)"/>
+  <path d="M 220 240 Q 230 325 240 325" stroke="rgba(107,122,153,.3)" stroke-width="1" fill="none" stroke-dasharray="4 3" marker-end="url(#arr-r)"/>
+  <path d="M 220 245 Q 230 395 240 395" stroke="rgba(107,122,153,.3)" stroke-width="1" fill="none" stroke-dasharray="4 3" marker-end="url(#arr-r)"/>
+
+  <!-- RRF Merge box -->
+  <rect x="480" y="155" width="160" height="65" rx="10" fill="rgba(176,160,224,.12)" stroke="#b0a0e0"/>
+  <text x="560" y="180" text-anchor="middle" fill="#e9eef7" font-weight="700" font-size="13">RRF Merge</text>
+  <text x="560" y="198" text-anchor="middle" fill="#b0a0e0" font-size="10">k=60 · dedup_per_file</text>
+  <text x="560" y="212" text-anchor="middle" fill="#95a4c2" font-size="9">vec_protect: top-5 → top-10</text>
+
+  <!-- Arrows from active arms to RRF -->
+  <path d="M 420 115 Q 450 115 480 170" stroke="#5db890" stroke-width="1.5" fill="none" marker-end="url(#arr-g)"/>
+  <path d="M 420 185 L 480 185" stroke="#5db890" stroke-width="1.5" fill="none" marker-end="url(#arr-g)"/>
+  <path d="M 420 255 Q 450 255 480 200" stroke="#5db890" stroke-width="1.5" fill="none" marker-end="url(#arr-g)"/>
+
+  <!-- Result box -->
+  <rect x="700" y="165" width="150" height="50" rx="10" fill="rgba(244,211,94,.1)" stroke="#f4d35e"/>
+  <text x="775" y="188" text-anchor="middle" fill="#e9eef7" font-weight="600" font-size="13">Top-20 Results</text>
+  <text x="775" y="205" text-anchor="middle" fill="#f4d35e" font-size="10">38/70 golden hits</text>
+
+  <!-- Arrow: RRF → Results -->
+  <path d="M 640 188 L 700 188" stroke="#b0a0e0" stroke-width="1.8" fill="none" marker-end="url(#arr)"/>
+
+  <!-- Legend -->
+  <rect x="500" y="280" width="10" height="10" rx="2" fill="rgba(93,184,144,.3)" stroke="#5db890"/>
+  <text x="516" y="289" fill="#95a4c2" font-size="10">Active arm</text>
+  <rect x="500" y="300" width="10" height="10" rx="2" fill="rgba(224,96,112,.1)" stroke="rgba(224,96,112,.3)" stroke-dasharray="2 2"/>
+  <text x="516" y="309" fill="#95a4c2" font-size="10">Disabled (tested &amp; rejected)</text>
+
+  <!-- HyDE annotation -->
+  <rect x="500" y="340" width="150" height="40" rx="6" fill="rgba(224,96,112,.06)" stroke="rgba(224,96,112,.2)" stroke-dasharray="3 2"/>
+  <text x="575" y="358" text-anchor="middle" fill="#95a4c2" font-size="10">HyDE Query Rewrite</text>
+  <text x="575" y="372" text-anchor="middle" fill="#e06070" font-size="9">--hyde flag only (opt-in)</text>
+</svg>
+</div>
+
+<div class="finding">
+<strong>Architecture insight:</strong> The 3 active arms cover complementary axes — semantic similarity (BGE vector), exact lexical matching (TF-IDF), and filesystem path/name matching (Recoll path). Adding more lexical arms (Recoll content, FTS5) proved redundant.
+</div>
+
+<!-- ═══ EXPERIMENT 1: WEIGHT TUNING ═══ -->
+<h2 id="exp1">1. RRF Weight Tuning (v5 → v7.1c)</h2>
+<p>Iterative grid search over RRF arm weights. The biggest single gain came from adding Recoll path matching (+12.4pp).</p>
+
+<table>
+<tr><th>Version</th><th>W_VEC</th><th>W_TF</th><th>W_RECOLL_PATH</th><th>W_RECOLL_CONTENT</th><th>Recall@20</th><th>&Delta;</th></tr>
+<tr><td>v5 (vector + TF-IDF only)</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">48.6%</td><td></td></tr>
+<tr><td>v6 (+ Recoll path)</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">0.0</td><td class="num">61.0%</td><td class="hit">+12.4pp</td></tr>
+<tr><td>v7 (Recoll path boosted)</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">1.5</td><td class="num">0.0</td><td class="num">66.7%</td><td class="hit">+5.7pp</td></tr>
+<tr><td>v7.1a (+ Recoll content)</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">1.5</td><td class="num">0.5</td><td class="num">67.6%</td><td class="hit">+0.9pp</td></tr>
+<tr><td><strong>v7.1c (content disabled)</strong></td><td class="num">1.0</td><td class="num">1.0</td><td class="num">1.5</td><td class="num">0.0</td><td class="num hit">69.5%</td><td class="hit">+1.9pp</td></tr>
+</table>
+
+<div class="finding">
+<strong>Finding:</strong> Recoll path (filename/directory matching) is the single largest recall driver after vector similarity. Content-level BM25 adds noise — disabling it gained +1.9pp. This was the first sign of <em>lexical arm saturation</em>.
+</div>
+
+<!-- ═══ EXPERIMENT 2: RERANKER ═══ -->
+<h2 id="exp2">2. Cross-Encoder Reranker</h2>
+<p>bge-reranker-v2-m3 tested on the 32 residual misses, reranking Cohere top-100 candidates.</p>
+
+<table>
+<tr><th>Outcome</th><th>Count</th><th>%</th></tr>
+<tr><td class="miss">NOT_IN_POOL (target not in top-100)</td><td class="num miss">25</td><td class="num miss">78%</td></tr>
+<tr><td class="hit">RESCUE (pushed to top-20)</td><td class="num">2</td><td class="num">6%</td></tr>
+<tr><td>STILL_MISS (in pool, reranker fails)</td><td class="num">3</td><td class="num">9%</td></tr>
+<tr><td>ALREADY_HIT</td><td class="num">2</td><td class="num">6%</td></tr>
+</table>
+<p><span class="verdict v-dead">REJECTED</span> 78% of targets not in the candidate pool. Reranker cannot retrieve — it can only reorder. The bottleneck is <strong>coverage</strong>, not ranking quality.</p>
+
+<!-- ═══ EXPERIMENT 3: BGE-M3 PILOT ═══ -->
+<h2 id="exp3">3. BGE-M3 A/B Pilot (32 misses)</h2>
+<p>Head-to-head on residual misses: Cohere embed-multilingual-v3.0 vs BAAI/bge-m3 (1024-dim, dense mode).</p>
+
+<table>
+<tr><th>Outcome</th><th>Count</th><th>%</th></tr>
+<tr><td class="hit">BGE rescues (Cohere miss → BGE hit)</td><td class="num hit">10</td><td class="num hit">31%</td></tr>
+<tr><td>Cohere rescues (BGE miss → Cohere hit)</td><td class="num">0</td><td class="num">0%</td></tr>
+<tr><td>Both hit</td><td class="num">2</td><td class="num">6%</td></tr>
+<tr><td class="miss">Both miss</td><td class="num">20</td><td class="num">63%</td></tr>
+</table>
+<p><span class="verdict v-live">VIABLE</span> BGE-M3 rescues 10 queries Cohere cannot. Zero reverse regressions on the miss set.</p>
+
+<div class="finding">
+<strong>Finding:</strong> BGE-M3 has stronger Greek-language alignment than Cohere for domain-specific technical content. It also runs locally — no API calls, no data leaving the machine. This finding led to the full BGE integration in v7.2.
+</div>
+
+<!-- ═══ EXPERIMENT 4: BGE INTEGRATION ═══ -->
+<h2 id="exp4">4. BGE-M3 Full Integration (v7.2)</h2>
+<p>BGE-M3 embedded all 950K chunks locally (GPU), replacing Cohere as the primary vector arm. Three-store architecture established: Cohere ChromaDB + BGE ChromaDB + SQLite (text + FTS5).</p>
+
+<h3>3-Store Sync Architecture</h3>
+<table>
+<tr><th>Store</th><th>Contents</th><th>Purpose</th></tr>
+<tr><td>ChromaDB <code>fulldisk-1k</code></td><td>Cohere vectors + document text</td><td>Legacy vector search (disabled by default)</td></tr>
+<tr><td>ChromaDB <code>fulldisk-1k-bge</code></td><td>BGE-M3 vectors only</td><td>Primary vector arm (W=1.0)</td></tr>
+<tr><td>SQLite <code>chunks.db</code></td><td>Text + metadata + FTS5 index</td><td>Fast text lookup (900× vs ChromaDB cross-fetch)</td></tr>
+</table>
+
+<h3>SQLite Performance</h3>
+<div class="card">
+<div class="card-title">Text Lookup Speedup: 900×</div>
+<p>Fetching chunk text for TF-IDF scoring moved from ChromaDB cross-collection get (7.7s) to SQLite indexed lookup (8.6ms). This is the single largest latency win in the project history.</p>
+</div>
+
+<h3>v7.2 Benchmark (golden v1, 70 queries)</h3>
+<table>
+<tr><th>Config</th><th>Hits</th><th>Easy</th><th>Hard</th></tr>
+<tr><td>BGE vector-only (single arm)</td><td class="num">27/70</td><td class="num">21/38</td><td class="num">6/32</td></tr>
+<tr><td><strong>Full 4-arm RRF (v7.2)</strong></td><td class="num hit">38/70</td><td class="num hit">30/38</td><td class="num">8/32</td></tr>
+</table>
+<p>The +11 gain from 27→38 comes entirely from adding TF-IDF and Recoll-path arms to the BGE vector signal.</p>
+
+<!-- ═══ EXPERIMENT 5: RECOLL CONTENT ═══ -->
+<h2 id="exp5">5. Recoll Content BM25</h2>
+<p>Full-text BM25 via Recoll's Xapian index as a retrieval arm. Tested at various weights.</p>
+
+<table>
+<tr><th>W_RECOLL_CONTENT</th><th>Effect</th></tr>
+<tr><td class="num">0.5</td><td>+0.9pp (marginal gain, v7.1a)</td></tr>
+<tr><td class="num">0.0</td><td>+1.9pp when disabled (v7.1c) — content BM25 was adding noise</td></tr>
+</table>
+<p><span class="verdict v-dead">DISABLED</span> Recoll content matching adds noise that displaces correct results. Disabled at W=0.0.</p>
+
+<!-- ═══ EXPERIMENT 6: ALIAS EXPANSION ═══ -->
+<h2 id="exp6">6. Alias Expansion</h2>
+<p>Dictionary-based query expansion: maps Greek↔English synonyms and domain abbreviations. Multi-word phrase matching with overlap prevention.</p>
+
+<div class="card">
+<div class="card-title">Example Expansions</div>
+<ul>
+<li><code>ΕΝΦΙΑ</code> → property tax, enfia, real estate tax</li>
+<li><code>packet tracer</code> → cisco, networking lab, δίκτυα</li>
+<li><code>αλγόριθμος</code> → algorithm, αλγοριθμική, data structures</li>
+</ul>
+</div>
+<p><span class="verdict v-live">ACTIVE</span> Small but consistent gains on bilingual queries. Low cost (dictionary lookup, no LLM).</p>
+
+<!-- ═══ EXPERIMENT 7: HYDE ═══ -->
+<h2 id="exp7">7. HyDE — Hypothetical Document Embeddings</h2>
+<p>Ollama qwen2.5:7b generates a hypothetical answer document, which is then embedded and used as the vector query instead of the original text.</p>
+
+<h3>Results (70 golden queries, BGE-M3 vector-only arm)</h3>
+<table>
+<tr><th>Config</th><th>Hits</th><th>Easy</th><th>Hard</th></tr>
+<tr><td>Vanilla BGE baseline</td><td class="num">27/70</td><td class="num">21/38</td><td class="num">6/32</td></tr>
+<tr><td class="miss">HyDE BGE</td><td class="num miss">23/70</td><td class="num">20/38</td><td class="num">3/32</td></tr>
+<tr><td><strong>Delta</strong></td><td class="num miss">−4 hits</td><td></td><td></td></tr>
+</table>
+
+<h3>Gain/Loss Analysis</h3>
+<table>
+<tr><th></th><th>Count</th><th>Query Types</th></tr>
+<tr><td class="hit">GAINED (miss → hit)</td><td class="num">3</td><td>Abstract/reasoning: tax declaration, legal concept, property valuation</td></tr>
+<tr><td class="miss">LOST (hit → miss)</td><td class="num">7</td><td>Keyword/navigational: payroll, alarm notes, algorithms, tool names</td></tr>
+</table>
+<p><span class="verdict v-dead">REJECTED as default</span> <span class="verdict v-warn">Kept as --hyde flag</span></p>
+
+<div class="finding">
+<strong>Finding:</strong> HyDE helps abstract queries ("how much is my house worth?") by bridging semantic gaps. But it destroys navigational queries ("alarm ripple control notes") because the hypothetical document uses <em>different vocabulary</em> than the target. The generated text dilutes the exact-match signal. Net: −5.7 percentage points.
+</div>
+
+<!-- ═══ EXPERIMENT 8: FTS5 GRID SEARCH ═══ -->
+<h2 id="exp8">8. FTS5 Grid Search (the decisive experiment)</h2>
+<p>SQLite FTS5 (BM25, unicode61 tokenizer) tested as a 5th RRF arm. Grid search across 4 weight configurations on all 70 golden queries.</p>
+
+<h3>Results</h3>
+<table>
+<tr><th>Config</th><th>Hits</th><th>Easy</th><th>Hard</th><th>Gained</th><th>Lost</th></tr>
+<tr><td><strong>Baseline (no FTS5)</strong></td><td class="num hit">38/70</td><td class="num">30/38</td><td class="num">8/32</td><td>—</td><td>—</td></tr>
+<tr><td>FTS5 W=0.25</td><td class="num miss">37/70</td><td class="num">30/38</td><td class="num">7/32</td><td class="num">0</td><td class="num miss">1</td></tr>
+<tr><td>FTS5 W=0.50</td><td class="num miss">36/70</td><td class="num">30/38</td><td class="num">6/32</td><td class="num">0</td><td class="num miss">2</td></tr>
+<tr><td>FTS5 W=0.75</td><td class="num miss">36/70</td><td class="num">30/38</td><td class="num">6/32</td><td class="num">0</td><td class="num miss">2</td></tr>
+<tr><td>FTS5 W=1.00</td><td class="num miss">36/70</td><td class="num">30/38</td><td class="num">6/32</td><td class="num">0</td><td class="num miss">2</td></tr>
+</table>
+
+<h3>Visual: FTS5 Impact</h3>
+<div class="hbar-row">
+  <div class="hbar-label">Baseline (no FTS5)</div>
+  <div class="hbar-track"><div class="hbar-fill bar-hit" style="width:54.3%">38/70</div></div>
+</div>
+<div class="hbar-row">
+  <div class="hbar-label">FTS5 W=0.25</div>
+  <div class="hbar-track"><div class="hbar-fill bar-miss" style="width:52.9%">37/70</div></div>
+</div>
+<div class="hbar-row">
+  <div class="hbar-label">FTS5 W=0.50</div>
+  <div class="hbar-track"><div class="hbar-fill bar-miss" style="width:51.4%">36/70</div></div>
+</div>
+<div class="hbar-row">
+  <div class="hbar-label">FTS5 W=0.75</div>
+  <div class="hbar-track"><div class="hbar-fill bar-miss" style="width:51.4%">36/70</div></div>
+</div>
+<div class="hbar-row">
+  <div class="hbar-label">FTS5 W=1.00</div>
+  <div class="hbar-track"><div class="hbar-fill bar-miss" style="width:51.4%">36/70</div></div>
+</div>
+
+<p><span class="verdict v-dead">REJECTED</span> Zero gains at any weight. Only regressions.</p>
+
+<div class="finding">
+<strong>Why FTS5 failed — three reasons:</strong>
+<ul style="margin-top:6px">
+<li><strong>Redundant coverage:</strong> TF-IDF + Recoll-path already handle keyword matching. Queries FTS5 was supposed to rescue were already top-20 hits.</li>
+<li><strong>Common-keyword noise:</strong> FTS5 matches domain-frequent terms across hundreds of chunks, boosting wrong results' RRF scores and pushing marginal hits (rank 15-18) below the top-20 cutoff.</li>
+<li><strong>Misleading single-query tests:</strong> Individual test queries jumped to rank #1 with FTS5 — but they were already hits in the baseline. Rank improvement &ne; hit conversion.</li>
+</ul>
+</div>
+
+<!-- ═══ LEXICAL SATURATION ═══ -->
+<h2 id="saturation">Lexical Arm Saturation</h2>
+
+<p>The FTS5 experiment was decisive because it proved a pattern that had been building across multiple experiments:</p>
+
+<div class="summary-box">
+<h3>The Saturation Pattern</h3>
+<p>Every retrieval arm added after BGE-M3 (v7.2) has been <strong>net-negative</strong>:</p>
+<table>
+<tr><th>Arm</th><th>Type</th><th>Result</th></tr>
+<tr><td>HyDE</td><td>Semantic (query rewrite)</td><td class="miss">−5.7pp (rejected as default)</td></tr>
+<tr><td>FTS5 BM25</td><td>Lexical (exact match)</td><td class="miss">0 gains, 1-2 regressions</td></tr>
+<tr><td>Recoll Content BM25</td><td>Lexical (full-text)</td><td class="miss">Noise, disabled at W=0.0</td></tr>
+<tr><td>Cross-Encoder Reranker</td><td>Reranking</td><td class="miss">78% not in candidate pool</td></tr>
+</table>
+<p>This is not bad luck — it is <strong>saturation</strong>. The existing 3 active arms (BGE vector + TF-IDF + Recoll-path) already extract all available signal from the corpus. New arms can only add noise.</p>
+</div>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg">
+  <!-- Saturation curve -->
+  <text x="350" y="25" text-anchor="middle" fill="#b0a0e0" font-size="13" font-weight="600">Recall vs. Number of Arms</text>
+
+  <!-- Axes -->
+  <line x1="80" y1="250" x2="650" y2="250" stroke="#6b7a99" stroke-width="1.5"/>
+  <line x1="80" y1="250" x2="80" y2="40" stroke="#6b7a99" stroke-width="1.5"/>
+
+  <!-- Y axis labels -->
+  <text x="70" y="248" text-anchor="end" fill="#95a4c2" font-size="10">0%</text>
+  <text x="70" y="178" text-anchor="end" fill="#95a4c2" font-size="10">30%</text>
+  <text x="70" y="108" text-anchor="end" fill="#95a4c2" font-size="10">60%</text>
+  <text x="70" y="55" text-anchor="end" fill="#95a4c2" font-size="10">80%</text>
+  <text x="25" y="150" text-anchor="middle" fill="#95a4c2" font-size="10" transform="rotate(-90,25,150)">Recall@20</text>
+
+  <!-- Grid lines -->
+  <line x1="80" y1="178" x2="650" y2="178" stroke="rgba(255,255,255,.04)" stroke-dasharray="4 4"/>
+  <line x1="80" y1="108" x2="650" y2="108" stroke="rgba(255,255,255,.04)" stroke-dasharray="4 4"/>
+
+  <!-- Curve: the saturation shape -->
+  <path d="M 120 220 Q 200 170 280 130 Q 380 108 480 112 Q 560 118 620 120"
+        stroke="#5db890" stroke-width="2.5" fill="none"/>
+
+  <!-- Data points -->
+  <!-- 1 arm: BGE only = 27/70 = 38.6% -->
+  <circle cx="120" cy="220" r="6" fill="#5db890" stroke="#0e1626" stroke-width="2"/>
+  <text x="120" y="240" text-anchor="middle" fill="#95a4c2" font-size="9">1 arm</text>
+  <text x="120" y="210" text-anchor="middle" fill="#5db890" font-size="9" font-weight="600">38.6%</text>
+
+  <!-- 2 arms: +TF-IDF ~48.6% -->
+  <circle cx="200" cy="175" r="6" fill="#5db890" stroke="#0e1626" stroke-width="2"/>
+  <text x="200" y="240" text-anchor="middle" fill="#95a4c2" font-size="9">2 arms</text>
+  <text x="200" y="165" text-anchor="middle" fill="#5db890" font-size="9" font-weight="600">48.6%</text>
+
+  <!-- 3 arms: +Recoll-path = 54.3% -->
+  <circle cx="310" cy="128" r="7" fill="#5db890" stroke="#f4d35e" stroke-width="2"/>
+  <text x="310" y="240" text-anchor="middle" fill="#95a4c2" font-size="9">3 arms</text>
+  <text x="310" y="118" text-anchor="middle" fill="#f4d35e" font-size="10" font-weight="700">54.3%</text>
+  <text x="310" y="255" text-anchor="middle" fill="#f4d35e" font-size="8" font-weight="600">← production</text>
+
+  <!-- 4 arms: +Recoll content = noise, stays ~54% -->
+  <circle cx="420" cy="130" r="5" fill="#e06070" stroke="#0e1626" stroke-width="2"/>
+  <text x="420" y="240" text-anchor="middle" fill="#95a4c2" font-size="9">+content</text>
+  <text x="420" y="122" text-anchor="middle" fill="#e06070" font-size="9">noise</text>
+
+  <!-- 5 arms: +FTS5 = regression -->
+  <circle cx="520" cy="134" r="5" fill="#e06070" stroke="#0e1626" stroke-width="2"/>
+  <text x="520" y="240" text-anchor="middle" fill="#95a4c2" font-size="9">+FTS5</text>
+  <text x="520" y="126" text-anchor="middle" fill="#e06070" font-size="9">−1 to −2</text>
+
+  <!-- HyDE point (different axis — it's a query rewrite, not an arm) -->
+  <circle cx="610" cy="142" r="5" fill="#e06070" stroke="#0e1626" stroke-width="2"/>
+  <text x="610" y="240" text-anchor="middle" fill="#95a4c2" font-size="9">+HyDE</text>
+  <text x="610" y="134" text-anchor="middle" fill="#e06070" font-size="9">−5.7pp</text>
+
+  <!-- Saturation region annotation -->
+  <rect x="360" y="55" width="270" height="30" rx="6" fill="rgba(224,96,112,.08)" stroke="rgba(224,96,112,.2)" stroke-dasharray="3 2"/>
+  <text x="495" y="74" text-anchor="middle" fill="#e06070" font-size="11" font-weight="600">SATURATION ZONE — no new arms help</text>
+
+  <!-- X axis label -->
+  <text x="365" y="278" text-anchor="middle" fill="#95a4c2" font-size="10">Retrieval complexity →</text>
+</svg>
+</div>
+
+<!-- ═══ TIMELINE ═══ -->
+<h2 id="timeline">Development Timeline</h2>
+
+<div class="timeline">
+  <div class="tl-item tl-green">
+    <div class="tl-date">March 2026</div>
+    <div class="tl-title">Project start — Cohere + ChromaDB</div>
+    <div class="tl-body">950K chunks indexed with Cohere embed-multilingual-v3.0. Single vector arm. Basic retrieval working.</div>
+  </div>
+  <div class="tl-item tl-green">
+    <div class="tl-date">April 2026</div>
+    <div class="tl-title">RRF multi-arm pipeline (v5→v7.1c)</div>
+    <div class="tl-body">Added TF-IDF + Recoll arms. Weight tuning via grid search. Recall jumped 48.6%→69.5% on 105-query eval set. Alias expansion added.</div>
+  </div>
+  <div class="tl-item tl-red">
+    <div class="tl-date">April 2026</div>
+    <div class="tl-title">Reranker tested & rejected</div>
+    <div class="tl-body">bge-reranker-v2-m3: 78% of targets not in candidate pool. Coverage is the bottleneck, not ranking.</div>
+  </div>
+  <div class="tl-item tl-green">
+    <div class="tl-date">May 2026</div>
+    <div class="tl-title">BGE-M3 pilot proves viability</div>
+    <div class="tl-body">10/32 residual misses rescued. Zero reverse regressions. Local model = no API dependency.</div>
+  </div>
+  <div class="tl-item tl-green">
+    <div class="tl-date">June 2026</div>
+    <div class="tl-title">BGE-M3 full integration (v7.2)</div>
+    <div class="tl-body">3-store architecture (Cohere + BGE + SQLite). SQLite text store = 900× faster lookup. Golden v1 benchmark frozen: 38/70.</div>
+  </div>
+  <div class="tl-item tl-red">
+    <div class="tl-date">June 2026</div>
+    <div class="tl-title">HyDE evaluated & rejected as default</div>
+    <div class="tl-body">Ollama qwen2.5:7b. +3 abstract queries, −7 navigational queries. Net −5.7pp. Kept as manual --hyde flag.</div>
+  </div>
+  <div class="tl-item tl-red">
+    <div class="tl-date">June 2026</div>
+    <div class="tl-title">FTS5 grid search — lexical saturation confirmed</div>
+    <div class="tl-body">5 weight configs × 70 queries. Zero gains, 1-2 regressions at every weight. Lexical axis proved saturated. v7.2 frozen as production.</div>
+  </div>
+  <div class="tl-item tl-yellow">
+    <div class="tl-date">June 2026</div>
+    <div class="tl-title">Project paused — retriever at ceiling</div>
+    <div class="tl-body">Both independent AI advisors (GPT-5, Claude Opus 4.8) agree: stop adding retrieval arms. Future gains require data-quality work (re-OCR, re-chunking), not retrieval improvements.</div>
+  </div>
+</div>
+
+<!-- ═══ KEY FINDINGS ═══ -->
+<h2 id="findings">Key Findings</h2>
+
+<div class="card">
+<div class="card-title">1. Coverage beats ranking</div>
+<p>The reranker experiment proved this definitively: 78% of missed targets aren't in the top-100 candidate pool at all. No amount of reranking or scoring refinement can retrieve a document that isn't in the pool. The retrieval arms' job is coverage — getting the right document into the candidate set.</p>
+</div>
+
+<div class="card">
+<div class="card-title">2. Complementary axes matter, redundant ones don't</div>
+<p>The 3 active arms succeed because they cover orthogonal axes: semantic similarity (vector), exact term matching (TF-IDF), and filesystem structure (Recoll path). Adding another lexical arm (FTS5, Recoll content) is redundant — it matches the same terms the existing arms already find, and the noise displaces marginal hits.</p>
+</div>
+
+<div class="card">
+<div class="card-title">3. HyDE is a precision tool, not a general improvement</div>
+<p>HyDE helps when the user's query uses different words than the document ("how much is my house worth?" → property valuation report). It hurts when the query already contains the right keywords ("alarm ripple control notes"). This makes it inherently unsuitable as a default — but valuable as an opt-in flag for abstract/reasoning queries.</p>
+</div>
+
+<div class="card">
+<div class="card-title">4. Local models can beat commercial APIs</div>
+<p>BGE-M3 (local, free, private) rescued 10 queries that Cohere (cloud API, paid) missed, with zero reverse regressions on the miss set. For domain-specific multilingual content, open-source models can match or exceed commercial embeddings — especially when the domain vocabulary is niche.</p>
+</div>
+
+<div class="card">
+<div class="card-title">5. The remaining gap is data quality, not retrieval</div>
+<p>Of the 32 hard misses, most are: scanned PDFs with poor OCR, deep filesystem paths not reflected in chunk text, or Greek semantic gaps in embeddings. No retrieval arm can fix garbled OCR text or missing content. The next improvements must come from upstream: better text extraction, structural re-chunking, or targeted re-OCR of specific documents.</p>
+</div>
+
+<!-- ═══ WHAT'S NEXT ═══ -->
+<h2 id="next">What's Next</h2>
+
+<div class="summary-box">
+<h3>Recommended: Stop Adding Arms</h3>
+<p>Both independent AI advisors agree on this assessment. The retrieval pipeline is at its ceiling. Future work should focus on:</p>
+<ul>
+<li><strong>Semantic/structural re-chunking</strong> (bounded experiment) — the one untested lever that changes what gets embedded upstream of all arms</li>
+<li><strong>Path/entity candidate injection</strong> — deterministic file injection when query terms match filepath tokens, targeting deep-path navigational queries</li>
+<li><strong>Targeted re-OCR</strong> — on-demand for specific documents that matter (legal/financial scans), not a corpus-wide pipeline</li>
+<li><strong>Curated alias dictionaries</strong> — cheap, manual, covers recurring Greek↔English domain terms</li>
+</ul>
+<p>What <strong>not</strong> to pursue: more lexical arms, Recoll content tuning, global HyDE, broad query rewriting, additional rerankers.</p>
+</div>
+
+<!-- ─── FOOTER ─── -->
+<div style="margin-top:40px; padding-top:16px; border-top:1px solid var(--border); color:var(--muted); font-size:.8rem;">
+  <p>dsearch2 — semantic disk search · 950K chunks · 128K files · ChromaDB + BGE-M3 + SQLite</p>
+  <p>Report generated June 2026 · <a href="https://github.com/gruncode/semantic-disk-search">github.com/gruncode/semantic-disk-search</a></p>
+</div>
+
+</main>
+
+<!-- ─── NAV HIGHLIGHT SCRIPT ─── -->
+<script>
+const navLinks = document.querySelectorAll('#nav a[href^="#"]');
+const sections = [...navLinks].map(a => document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean);
+function updateNav() {
+  let current = '';
+  for (const s of sections) {
+    if (s.getBoundingClientRect().top <= 100) current = s.id;
+  }
+  navLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+  });
+}
+document.querySelector('main').addEventListener('scroll', updateNav);
+window.addEventListener('scroll', updateNav);
+updateNav();
+</script>
+
+</body>
+</html>

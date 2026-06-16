@@ -1,1061 +1,262 @@
-#!$VENV_GTE
-"""
-================================================================================
-dsearch-answer — Full-disk semantic search with AI-ranked answer
-================================================================================
+#!/usr/bin/env python3
+# dsearch2-answer — Passage-first answer pipeline using dsearch2 retriever.
+# Retrieves ranked passages via dsearch2 --json, builds context, calls Claude for synthesis.
+# Keywords: dsearch2-answer, passage pipeline, RAG, answer, semantic search, Claude
+import sys, os, json, subprocess, argparse, textwrap
 
-PURPOSE
-  Given a natural-language question (Greek or English), find the most relevant
-  files on disk and produce a cited answer. The "CLexpand → CLrank → CLanswer"
-  pipeline: Claude expands the query, ranks files, then reads originals to answer.
+# ── Constants ───────────────────────────────────────────────────────────────
+DEFAULT_TOP_PASSAGES = 50   # how many passages to retrieve from dsearch2
+DEFAULT_TOP_ANSWER   = 20   # how many passages to feed to Claude for answer synthesis
+DEFAULT_MAX_PER_FILE = 4    # diversity cap: max chunks from one file in answer context
+DSEARCH2_BIN = '/usr/local/bin/dsearch2'
 
-USAGE
-  dsearch-answer [-deep] "query" [n_results]
-  Examples:
-    dsearch-answer "find all documents about project delays"
-    dsearch-answer -deep "evaluation of Siemens proposal"
-    dsearch-answer "water bill sfaka" 50
+# ── Helpers ─────────────────────────────────────────────────────────────────
 
-INPUTS
-  argv[1]  query string (natural language)
-  argv[2]  n_results (optional, default 100 files from retrieval)
-  -deep    enable multi-hop retrieval (3 extra search loops)
-
-OUTPUTS (stdout)
-  Progress log per step (timestamped)
-  Final: ANSWER section with [filename] citations + SOURCES list
-
-PIPELINE (6 steps)
-  1. Query understanding     → Claude parses query into JSON:
-                                core_query + variants + subject_terms + HyDE
-  2. Hybrid retrieval        → Cohere embeds all queries, ChromaDB finds top 100
-     (2b) Deep loop [-deep]  → Read top 10 (MMR-diverse), extract new terms, repeat
-  3. Text extraction         → pdftotext / antiword / zipfile / openpyxl / OCR
-  4. Parallel ranking        → 10 batches × 10 files, 6 Claude workers score 0-10
-  5. Merge + dedup           → top 15 by agent score (stem dedup for email threads)
-  6. Final answer            → Claude reads ORIGINAL text of top 15 → cites sources
-
-EXTERNAL RESOURCES
-  ChromaDB  $CHROMADB_DIR         (~997K chunks, persistent)
-  Cohere    embed-multilingual-v3.0 (API)            (query embedding)
-  Claude    claude -p via subprocess (CLI)           (Steps 1, 2b, 4, 6)
-  Env keys  ~/.config/dsearch/.env                           (COHERE_API_KEY, etc.)
-
-RELATED FILES
-  dsearch                      — Lightweight sibling (no agent ranking, HTML view)
-  extract_chunks.py            — Builds ChromaDB from disk files (one-time indexing)
-  cohere_embed.py              — Embeds chunks with Cohere (used by extract_chunks)
-  build_chroma_from_embeddings → Assembles .npy embeddings into ChromaDB collection
-  docs/index.html              — Pipeline diagram (clickable, links back to here)
-
-COST PER RUN
-  Standard: 1 Claude (expand) + 10 Claude (rank) + 1 Claude (answer) + N Cohere = ~$0.20-0.40
-  Deep:     +3 Claude (loop) + 3-15 extra Cohere embeds                         = ~$0.30-0.60
-================================================================================
-"""
-import os, sys, re, json, time, subprocess, zipfile, unicodedata
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from json_repair import repair_json        # Fixes malformed JSON from LLM output
-import regex as re_unicode                 # Unicode-aware regex (better Greek word boundaries)
-
-# ── Config ────────────────────────────────────────────────────────
-# Retrieval sizing
-MAX_FILES = 100            # Top N files to extract+rank after retrieval (Step 2 output)
-BATCH_SIZE = 10            # Files per agent in Step 4 (100 files ÷ 10 = 10 agents)
-
-# Text budget limits (controls Claude prompt sizes — too big = timeout / context overflow)
-MAX_FILE_CHARS = 300000    # ~120 pages per file, safe for Claude 1M context window
-MAX_AGENT_CHARS = 150000   # ~40K tokens per agent prompt — leaves headroom for claude -p
-
-# Concurrency
-AGENT_WORKERS = 6          # Parallel claude -p subprocesses in Step 4 (balance speed vs CPU load)
-
-# ChromaDB location (built by extract_chunks.py + build_chroma_from_embeddings.py)
-CHROMA_PATH = '$CHROMADB_DIR'
-COLLECTION = 'fulldisk'    # ChromaDB collection name (~997K chunks from entire disk)
-
-# Deep retrieval loop (Step 2b, only with -deep flag)
-DEEP_MAX_LOOPS = 3         # Max iterations of "read → extract terms → search again"
-DEEP_PEEK_FILES = 10       # Files read per loop to extract new search terms (MMR-selected)
-
-# ── Load env ──────────────────────────────────────────────────────
-# Loads API keys (COHERE_API_KEY etc.) from ~/.config/dsearch/.env into os.environ.
-# setdefault = don't overwrite if already set in shell.
-with open('~/.config/dsearch/.env') as f:
-    for line in f:
-        if '=' in line and not line.startswith('#'):
-            k, v = line.strip().split('=', 1)
-            os.environ.setdefault(k, v)
-
-# ── Helpers ───────────────────────────────────────────────────────
-def tprint(msg):
-    """Timestamped progress print (used for inline step progress)."""
-    print(f'  [{time.strftime("%H:%M:%S")}] {msg}', flush=True)
-
-def run_claude(prompt, timeout=60):
-    """Spawn 'claude -p -' subprocess, feed prompt via stdin, return stdout.
-    Why stdin instead of argv: prompts can be >100KB, exceeding POSIX ARG_MAX.
-    Returns '[timeout]' or '[error: ...]' on failure (callers handle these strings).
-    """
+def run_dsearch2(query, top_n, no_alias=False, cohere=False, hyde=False):
+    cmd = [DSEARCH2_BIN, '--json', '--top', str(top_n)]
+    if no_alias:
+        cmd.append('--no-alias')
+    if cohere:
+        cmd.append('--cohere')
+    if hyde:
+        cmd.append('--hyde')
+    cmd.append(query)
     try:
-        cp = subprocess.run(
-            ['claude', '-p', '-'],
-            capture_output=True, timeout=timeout,
-            input=prompt, text=True
-        )
+        cp = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        if cp.returncode != 0:
+            print(f'ERROR: dsearch2 failed: {cp.stderr.strip()}', file=sys.stderr)
+            return None
+        return json.loads(cp.stdout)
+    except subprocess.TimeoutExpired:
+        print('ERROR: dsearch2 timed out', file=sys.stderr)
+        return None
+    except json.JSONDecodeError as e:
+        print(f'ERROR: dsearch2 JSON parse error: {e}', file=sys.stderr)
+        return None
+
+def run_claude(prompt, timeout=120):
+    # spawn claude -p - subprocess, feed prompt via stdin
+    cmd = ['claude', '-p', '-']
+    model = os.environ.get('DSEARCH2_MODEL')
+    if model:
+        cmd = ['claude', '--model', model, '-p', '-']
+    try:
+        cp = subprocess.run(cmd, capture_output=True, timeout=timeout, input=prompt, text=True)
         return cp.stdout.strip()
     except subprocess.TimeoutExpired:
         return '[timeout]'
     except Exception as e:
         return f'[error: {e}]'
 
-def _file_stem(filename):
-    """Normalize filename for cross-folder deduplication.
-    Returns a lowercase 'canonical' key — used to collapse copies, backups,
-    and email threads so the same content isn't ranked twice.
+def apply_diversity_filter(passages, max_per_file=DEFAULT_MAX_PER_FILE):
+    from collections import Counter
+    file_counts = Counter()
+    filtered = []
+    for p in passages:
+        path = p.get('path', '')
+        if file_counts[path] < max_per_file:
+            file_counts[path] += 1
+            filtered.append(p)
+    return filtered
+
+def file_distribution(passages):
+    from collections import Counter
+    return dict(Counter(os.path.basename(p.get('path', '?')) for p in passages).most_common())
+
+def build_context(passages, max_passages=DEFAULT_TOP_ANSWER):
+    # build passage context block for the LLM prompt
+    lines = []
+    for p in passages[:max_passages]:
+        tier = p.get('source_tier', '?')
+        path = p.get('path', '?')
+        cid = p.get('chunk_id', '?')
+        score = p.get('score', 0)
+        text = p.get('text', '').strip()
+        lines.append(f'[P{p["rank"]}] tier={tier} score={score:.4f} path={path} chunk={cid}')
+        lines.append(text)
+        lines.append('')
+    return '\n'.join(lines)
+
+def build_answer_prompt(query, query_expanded, passages_context):
+    # the synthesis prompt sent to Claude
+    return textwrap.dedent(f"""\
+        You are a document analyst answering a query from a personal archive.
+        The user searched their disk for: "{query}"
+        (expanded query: "{query_expanded}")
+
+        Below are the top ranked passages retrieved from the archive. Each passage
+        has a source tier (A=official/authority, B=professional, C=personal notes, D=ambiguous),
+        a file path, a chunk ID, and a relevance score.
+
+        PASSAGES:
+        {passages_context}
+
+        INSTRUCTIONS:
+        1. Answer the query using ONLY information from the passages above.
+        2. For each claim, cite the source: [P<rank>] path, tier.
+        3. Mark each claim's evidence status:
+           - CONFIRMED: supported by tier A source
+           - SUPPORTED: supported by tier B source
+           - UNCONFIRMED: only tier C/D sources
+           - WEAK: single source, no corroboration
+        4. If passages don't contain enough to answer, say so explicitly.
+        5. Output format:
+           ANSWER:
+           <your answer with inline citations>
+
+           CLAIM EVIDENCE:
+           - Claim: <claim text>
+             Status: <CONFIRMED|SUPPORTED|UNCONFIRMED|WEAK>
+             Sources: [P<n>] <path> (tier <X>)
+             Key quote: "<relevant excerpt>"
+
+           SOURCES:
+           <numbered list of unique source files with tier>
+    """)
+
+# ── Output formatters ───────────────────────────────────────────────────────
+
+TIER_COLOR = {'A': '\033[32m', 'B': '\033[34m', 'C': '\033[33m', 'D': '\033[90m'}
+RESET = '\033[0m'
+
+def print_passages(passages, max_show=10):
+    # show retrieved passages in terminal
+    print(f'\n{"="*60}')
+    print(f'RETRIEVED PASSAGES (top {min(max_show, len(passages))} of {len(passages)})')
+    print(f'{"="*60}\n')
+    for p in passages[:max_show]:
+        tier = p.get('source_tier', '?')
+        color = TIER_COLOR.get(tier, '')
+        path = p.get('path', '?')
+        text = p.get('text', '').replace('\n', ' ')[:150]
+        print(f'  {p["rank"]:3d}. [{color}{tier}{RESET}] {p["score"]:.4f}  {path}')
+        print(f'       {text}')
+        print()
+
+def build_json_output(query_orig, query_expanded, aliases_used, answer_text, passages):
+    return json.dumps({
+        'query_original': query_orig,
+        'query_expanded': query_expanded,
+        'aliases_used': aliases_used,
+        'answer': answer_text,
+        'passages_used': len(passages),
+        'passages': passages
+    }, ensure_ascii=False, indent=2)
+
+# ── Main ────────────────────────────────────────────────────────────────────
 
-    Handles these real-world patterns:
-      - Version suffixes:  report-v2.pdf, report-BACK.pdf, report(1).pdf → "report"
-      - Email numbering:   e0275_RE__Invoice.eml → "invoice"
-      - Reply prefixes:    RE__Proposal.eml, Fw__Proposal.eml → "proposal"
-    """
-    name = os.path.splitext(filename)[0]
-    # Email thread dedup: strip "e0275_" export prefix + RE__/FW__ reply markers
-    name = re.sub(r'^e\d{3,5}_', '', name)
-    name = re.sub(r'^(?:RE|Re|FW|Fw)__', '', name)
-    # Backup/version suffixes: BACK, BACK2, copy, Copy2
-    name = re.sub(r'[-_]?(?:BACK|back|copy|Copy)\d*$', '', name)
-    # Parenthesized copy counter: "file(2)" → "file"
-    name = re.sub(r'\(\d+\)$', '', name)
-    # Trailing numeric: "file.2" / "file-3" → "file"
-    name = re.sub(r'[-_.]?\d+$', '', name)
-    # Trailing v-version: "file-v2", "file.v3" → "file"
-    name = re.sub(r'[-_.]?v\d+$', '', name)
-    return name.strip('.-_ ').lower()
-
-
-def extract_text(path, max_chars=MAX_FILE_CHARS):
-    """Extract plain text from any supported file format.
-    Used by Step 3 (extract) and Step 2b (deep loop peek).
-
-    Strategy: dispatch by file extension to the right tool.
-    Returns at most max_chars of text. Never raises — errors become "[error: ...]".
-
-    Supported formats:
-      .pdf   → pdftotext CLI (fast, native text); falls back to .ocr.gemini.md/.txt sidecar for scans
-      .docx  → unzip + strip XML tags (no python-docx dependency)
-      .odt/.ods → same trick (content.xml inside zip)
-      .doc   → antiword CLI (old Word binary format)
-      .xlsx  → openpyxl (first 3 sheets, 200 rows each)
-      .xls   → xlrd (old Excel binary)
-      .jpg/png/etc → OCR sidecar only (no live OCR — too slow, pre-computed by bulk_ocr_gemini)
-      .html  → strip tags with regex
-      * else → read as text
-    """
-    path = str(path)
-    ext = os.path.splitext(path)[1].lower()
-    try:
-        # PDF: try text layer first; if empty (scanned PDF), use Gemini OCR sidecar
-        if ext == '.pdf':
-            cp = subprocess.run(
-                ['pdftotext', '-q', '-nopgbrk', path, '-'],    # -q quiet, -nopgbrk no page breaks
-                capture_output=True, timeout=15, text=True
-            )
-            text = cp.stdout
-            # Less than 50 chars = PDF has no text layer (pure scan) → use OCR cache
-            if len(text.strip()) < 50:
-                for suffix in ['.pdf.ocr.gemini.md', '.pdf.ocr.gemini.txt']:
-                    ocr = path + suffix
-                    if os.path.exists(ocr):
-                        text = open(ocr, errors='replace').read()
-                        break
-            return text[:max_chars]
-
-        # DOCX (modern Word): actually a ZIP containing XML
-        # word/document.xml holds the text + tags — strip tags with regex
-        if ext == '.docx':
-            with zipfile.ZipFile(path) as z:
-                xml = z.read('word/document.xml').decode('utf-8', errors='replace')
-            return re.sub(r'<[^>]+>', ' ', xml)[:max_chars]
-
-        # ODT / ODS (LibreOffice): same trick, content.xml is the text source
-        if ext in ('.odt', '.ods'):
-            with zipfile.ZipFile(path) as z:
-                xml = z.read('content.xml').decode('utf-8', errors='replace')
-            return re.sub(r'<[^>]+>', ' ', xml)[:max_chars]
-
-        # DOC (pre-2007 Word binary): antiword is the only reliable CLI extractor
-        if ext == '.doc':
-            cp = subprocess.run(
-                ['antiword', path],
-                capture_output=True, timeout=10, text=True
-            )
-            return cp.stdout[:max_chars]
-
-        # XLSX (modern Excel): first 3 sheets × 200 rows, join cells with " | "
-        # data_only=True evaluates formulas to their cached values
-        if ext == '.xlsx':
-            try:
-                import openpyxl
-                wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-                lines = []
-                for ws in wb.worksheets[:3]:  # Cap at 3 sheets to avoid huge files
-                    for row in ws.iter_rows(max_row=200, values_only=True):
-                        vals = [str(c) for c in row if c is not None]
-                        if vals:
-                            lines.append(' | '.join(vals))
-                wb.close()
-                return '\n'.join(lines)[:max_chars]
-            except Exception:
-                return '[xlsx extraction failed]'
-
-        # XLS (pre-2007 binary Excel): xlrd only supports .xls (not .xlsx in new versions)
-        if ext == '.xls':
-            try:
-                import xlrd
-                wb = xlrd.open_workbook(path)
-                lines = []
-                for ws in wb.sheets()[:3]:
-                    for r in range(min(ws.nrows, 200)):
-                        vals = [str(ws.cell_value(r, c)) for c in range(ws.ncols) if ws.cell_value(r, c)]
-                        if vals:
-                            lines.append(' | '.join(vals))
-                return '\n'.join(lines)[:max_chars]
-            except Exception:
-                return '[xls extraction failed]'
-
-        # Images: NO live OCR (too slow for 100 files/query).
-        # Uses pre-computed Gemini OCR sidecars (from bulk_ocr_gemini-onDATA.py).
-        # Sidecar naming: image.jpg → image.jpg.ocr.gemini.txt (preferred: .md, then .txt, then pro variants)
-        if ext in ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp'):
-            for suffix in ['.ocr.gemini-pro.txt', '.ocr.gemini.txt', '.ocr.gemini.md', '.ocr.txt']:
-                ocr = path + suffix
-                if os.path.exists(ocr):
-                    return open(ocr, errors='replace').read()[:max_chars]
-            return '[no OCR sidecar]'
-
-        # HTML: strip <style>/<script> blocks first (content in them is useless),
-        # then strip remaining tags, then collapse whitespace.
-        if ext in ('.html', '.htm'):
-            text = open(path, errors='replace').read()
-            text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
-            text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL)
-            text = re.sub(r'<[^>]+>', ' ', text)
-            text = re.sub(r'\s+', ' ', text)
-            return text.strip()[:max_chars]
-
-        # Fallback: treat as plain text (txt, md, csv, py, json, yml, log, etc.)
-        # errors='replace' handles non-UTF8 bytes without crashing
-        return open(path, errors='replace').read()[:max_chars]
-
-    except Exception as e:
-        # Never raise — caller (Step 3) checks for "[" prefix to detect failures
-        return f'[extraction error: {e}]'
-
-
-# ── Step 1: Query understanding ───────────────────────────────────
-# INPUT:  raw user query (natural language, Greek or English)
-# OUTPUT: list of search queries — [core_query, variants..., subjects..., HyDE]
-# METHOD: pre-search for context, then Claude expands into 5-8 search queries
-# WHY:    one query string produces weak embeddings; expansion + HyDE catches
-#         files using different vocabulary for the same concept
-def step_understand(query):
-    print(f'\n=== STEP 1: Query understanding ===', flush=True)
-    t0 = time.time()
-
-    # Pre-search: quick corpus peek to prime Claude with domain vocabulary.
-    # We embed the raw query, get top 10 filenames, feed them to Claude as context.
-    # This helps Claude guess domain-specific terms (equipment, project codes) it
-    # wouldn't know from the query alone.
-    peek_names = ''
-    try:
-        import cohere, chromadb
-        co = cohere.ClientV2(api_key=os.environ['COHERE_API_KEY'])
-        # Cohere multilingual v3 — handles Greek + English in same model
-        # input_type='search_query' tells Cohere to use query-side embedding
-        # (asymmetric retrieval: queries and documents get different embeddings)
-        resp = co.embed(texts=[query], model='embed-multilingual-v3.0',
-                        input_type='search_query', embedding_types=['float'])
-        col = chromadb.PersistentClient(path=CHROMA_PATH).get_collection(COLLECTION)
-        peek = col.query(query_embeddings=resp.embeddings.float_, n_results=10)
-        # Deduplicate filenames (same file can match multiple chunks)
-        seen = set()
-        names = []
-        for meta in peek['metadatas'][0]:
-            fn = os.path.basename(meta['path'])
-            if fn not in seen:
-                seen.add(fn)
-                names.append(fn)
-        peek_names = '\n'.join(f'  - {n}' for n in names[:8])
-        tprint(f'Pre-search found {len(names)} files for context')
-    except Exception as e:
-        tprint(f'Pre-search skipped: {e}')
-
-    prompt = (
-        'You are a query understanding system for a Greek/English document search engine.\n'
-        'Parse the user query and return ONLY valid JSON with these fields:\n\n'
-        '{\n'
-        '  "core_query": "the main searchable topic — strip any instructions/meta like '
-        'ψαξε, βρες, explain, summarize etc. Keep only WHAT to search for.",\n'
-        '  "variants": ["3-4 alternative phrasings of core_query. Include Greek morphological '
-        'variants (different cases/tenses/endings) and English translations."],\n'
-        '  "subject_terms": ["3-4 related TECHNICAL topics, concepts, document types, or '
-        'specific terms that would appear in files containing the answer. Think: what other '
-        'subjects, equipment, procedures, people, or technical details would documents about '
-        'this topic ALSO mention? These catch files that are relevant but use different vocabulary."],\n'
-        '  "entities": ["key proper nouns: company names, people, project names, codes"],\n'
-        '  "hypothetical_answer": "Write a SHORT (3-5 sentence) hypothetical answer to the '
-        'question. It does NOT need to be correct — it should use the VOCABULARY and TECHNICAL '
-        'TERMS that real documents containing the answer would use. Include specific domain '
-        'terms, equipment names, procedures, document types, Greek and English terms that '
-        'you GUESS would appear in the relevant files. This is used for HyDE (Hypothetical '
-        'Document Embedding) — the text will be embedded to find documents with similar vocabulary."\n'
-        '}\n\n'
-        'IMPORTANT for subject_terms:\n'
-        '- Think about what the DOCUMENTS would contain, not just the question.\n'
-        '- If the question is about evaluating a proposal, what technical areas does the '
-        'proposal cover? What specs, equipment, standards, site conditions?\n'
-        '- If the question is about a delay, what tasks were supposed to happen? What '
-        'prerequisites, approvals, technical reviews?\n'
-        '- Include both Greek and English terms.\n\n'
-        'IMPORTANT for hypothetical_answer:\n'
-        '- Use domain-specific vocabulary: equipment models, standards, Greek technical terms.\n'
-        '- Mention plausible document types (email, report, evaluation, protocol).\n'
-        '- Include BOTH the question topic AND the likely answer topics.\n'
-        '- It is OK to guess wrong — the goal is vocabulary coverage, not correctness.\n\n'
-        'Return ONLY the JSON. No explanation.\n\n'
-        + (f'CONTEXT — files already found for this query (use these to infer domain-specific terms):\n{peek_names}\n\n' if peek_names else '')
-        + f'User query: {query}'
-    )
-    raw = run_claude(prompt, timeout=45)
-
-    # Parse Claude's JSON response — two-stage parsing for robustness.
-    # LLMs sometimes wrap JSON in markdown fences, add trailing explanations,
-    # or use invalid quote chars. json_repair handles all of this.
-    parsed = {}
-    try:
-        # Stage 1: find {...} block and try strict json.loads
-        match = re.search(r'\{.*\}', raw, re.DOTALL)
-        if match:
-            parsed = json.loads(match.group())
-    except json.JSONDecodeError:
-        pass
-    if not parsed:
-        # Stage 2: json_repair fixes common LLM mistakes (smart quotes, trailing commas, etc.)
-        try:
-            fixed = repair_json(raw)
-            parsed = json.loads(fixed) if isinstance(fixed, str) else fixed
-            # Claude sometimes returns [{...}] instead of {...} — unwrap
-            if isinstance(parsed, list) and parsed:
-                parsed = parsed[0] if isinstance(parsed[0], dict) else {}
-            if not isinstance(parsed, dict):
-                parsed = {}
-            if parsed:
-                tprint(f'JSON repaired successfully')
-        except Exception:
-            # Last resort: both parse stages failed — fall back to raw query only
-            tprint(f'JSON parse failed — using raw query as fallback')
-            parsed = {}
-
-    # Extract the 5 JSON fields (with defaults in case Claude missed some)
-    core = parsed.get('core_query', query)          # Cleaned query, no instruction words
-    variants = parsed.get('variants', [])[:4]       # Alternative phrasings (Greek morphology + English)
-    subjects = parsed.get('subject_terms', [])[:4]  # Related topics documents might mention
-    entities = parsed.get('entities', [])[:4]       # Proper nouns (not used in retrieval, just logged)
-    hyde = parsed.get('hypothetical_answer', '')    # HyDE: fake answer for vocabulary matching
-
-    # Build the final search query list for Step 2.
-    # Order: core first, then variants, subjects, and HyDE last.
-    # HyDE: Hypothetical Document Embedding — a fake 3-5 sentence answer. Even if
-    # wrong, it contains the vocabulary real answer-containing docs would use.
-    # Paper: "Precise Zero-Shot Dense Retrieval without Relevance Labels" (2022)
-    search_queries = [core] + variants + subjects
-    if hyde:
-        search_queries.append(hyde)
-    # Deduplicate (case-insensitive), but skip HyDE — it's long and always unique.
-    seen = set()
-    deduped = []
-    for q in search_queries[:-1] if hyde else search_queries:
-        if q.lower() not in seen:
-            seen.add(q.lower())
-            deduped.append(q)
-    if hyde:
-        deduped.append(hyde)
-    search_queries = deduped
-
-    tprint(f'Parsed in {time.time()-t0:.1f}s')
-    tprint(f'Core: {core}')
-    if variants:
-        tprint(f'Variants ({len(variants)}):')
-        for v in variants:
-            tprint(f'  → {v}')
-    if subjects:
-        tprint(f'Subject terms ({len(subjects)}):')
-        for s in subjects:
-            tprint(f'  ★ {s}')
-    if entities:
-        tprint(f'Entities: {", ".join(entities)}')
-    if hyde:
-        tprint(f'HyDE ({len(hyde)} chars): {hyde[:120]}...')
-    tprint(f'Total search queries: {len(search_queries)}')
-
-    return search_queries
-
-
-# ── Step 2: Hybrid retrieval ─────────────────────────────────────
-# INPUT:  list of ~5-8 search queries from Step 1
-# OUTPUT: 4 dicts keyed by file path:
-#         ranked (top N tuples), file_scores (all), file_meta, file_embeds
-# METHOD: batch-embed all queries with Cohere, run each against ChromaDB,
-#         merge by path (keep best score), dedup by filename stem
-# WHY:    Cohere multilingual v3 understands Greek + English in one embedding space.
-#         ChromaDB holds ~997K chunks — pre-indexed by extract_chunks.py + cohere_embed.py
-def step_retrieve(queries, n=MAX_FILES):
-    print(f'\n=== STEP 2: Retrieve (ChromaDB x {len(queries)} queries) ===', flush=True)
-    t0 = time.time()
-    import cohere, chromadb
-
-    co = cohere.ClientV2(api_key=os.environ['COHERE_API_KEY'])
-    # Batch embed: one API call for all queries (cheaper + faster than one-at-a-time)
-    # Returns a list of float vectors (1024-dim for embed-multilingual-v3.0)
-    resp = co.embed(
-        texts=queries, model='embed-multilingual-v3.0',
-        input_type='search_query', embedding_types=['float']
-    )
-
-    col = chromadb.PersistentClient(path=CHROMA_PATH).get_collection(COLLECTION)
-
-    # Accumulators — keyed by file path. Since multiple chunks map to the same
-    # file, we keep the BEST scoring chunk per file.
-    file_scores = {}  # path → best score (higher = more relevant)
-    file_meta = {}    # path → metadata (folder, ext, filename, etc.)
-    file_embeds = {}  # path → embedding vector of best chunk (used by MMR in Step 2b)
-
-    # Run each query's embedding against ChromaDB (50 chunks per query)
-    # include=['embeddings'] is needed so MMR can compute diversity later
-    for i, qvec in enumerate(resp.embeddings.float_):
-        results = col.query(query_embeddings=[qvec], n_results=50,
-                            include=['documents', 'metadatas', 'distances', 'embeddings'])
-        # ChromaDB returns distance (lower=better); convert to similarity score (higher=better)
-        for doc, meta, dist, emb in zip(
-                results['documents'][0], results['metadatas'][0],
-                results['distances'][0], results['embeddings'][0]):
-            path = meta['path']
-            score = 1 - dist          # cosine distance → cosine similarity
-            # Keep the best chunk per file across all queries
-            if path not in file_scores or score > file_scores[path]:
-                file_scores[path] = score
-                file_meta[path] = meta
-                file_embeds[path] = emb
-
-    # Stem-based dedup: collapse email threads (RE__, FW__) and backup copies
-    # so the same content isn't ranked twice by different paths.
-    # _file_stem normalizes: "RE__Invoice.eml" and "Invoice.eml" → "invoice"
-    by_stem = {}  # stem → (path, score)
-    for path, score in file_scores.items():
-        stem = _file_stem(os.path.basename(path))
-        if stem not in by_stem or score > by_stem[stem][1]:
-            by_stem[stem] = (path, score)
-    pre_dedup = len(file_scores)
-    file_scores_new = {p: s for p, s in by_stem.values()}
-    # file_meta must stay in sync with file_scores after dedup
-    file_meta = {p: file_meta[p] for p in file_scores_new if p in file_meta}
-    file_scores = file_scores_new
-    if pre_dedup != len(file_scores):
-        tprint(f'Stem dedup: {pre_dedup} → {len(file_scores)} unique stems (emails + files collapsed)')
-
-    # Sort by score descending, take top N files
-    ranked = sorted(file_scores.items(), key=lambda x: -x[1])[:n]
-    tprint(f'{len(ranked)} unique files from {len(queries)} queries in {time.time()-t0:.1f}s')
-    if ranked:
-        tprint(f'Score range: {ranked[0][1]:.3f} — {ranked[-1][1]:.3f}')
-        for i, (p, s) in enumerate(ranked[:10]):
-            tprint(f'  {i+1:2d}. [{s:.3f}] {os.path.basename(p)}')
-        if len(ranked) > 10:
-            tprint(f'  ... +{len(ranked)-10} more files')
-    # Return: (ranked list for Step 3, full dicts for Step 2b deep loop)
-    return [(path, score, file_meta[path]) for path, score in ranked], file_scores, file_meta, file_embeds
-
-
-def _search_chromadb(queries, file_scores, file_meta):
-    """Helper for Step 2b: run more queries, MERGE into existing dicts.
-    Used when the deep loop finds new search terms. Returns count of newly-found files.
-    """
-    import cohere, chromadb
-    co = cohere.ClientV2(api_key=os.environ['COHERE_API_KEY'])
-    resp = co.embed(
-        texts=queries, model='embed-multilingual-v3.0',
-        input_type='search_query', embedding_types=['float']
-    )
-    col = chromadb.PersistentClient(path=CHROMA_PATH).get_collection(COLLECTION)
-    new_found = 0
-    for i, qvec in enumerate(resp.embeddings.float_):
-        results = col.query(query_embeddings=[qvec], n_results=50)
-        for doc, meta, dist in zip(
-                results['documents'][0], results['metadatas'][0],
-                results['distances'][0]):
-            path = meta['path']
-            score = 1 - dist
-            if path not in file_scores:
-                new_found += 1     # Track only fresh discoveries (not score updates)
-            if path not in file_scores or score > file_scores[path]:
-                file_scores[path] = score
-                file_meta[path] = meta
-    return new_found
-
-
-# ── MMR selector ──────────────────────────────────────────────────
-# MMR = Maximal Marginal Relevance (Carbonell & Goldstein, 1998)
-# Used in Step 2b deep loop to pick files that are BOTH relevant AND different
-# from each other. Without this, we'd just read the top 10 most similar files,
-# which are often near-duplicates and give no new search terms.
-#
-# Formula per candidate:  MMR = λ·relevance − (1−λ)·max_similarity_to_selected
-#   λ=1.0 → pure relevance (same as sorting by score)
-#   λ=0.0 → pure diversity (least similar to selected)
-#   λ=0.7 → default: 70% relevance weight, 30% diversity
-def _mmr_select(file_scores, file_embeds, already_read, k=10, lam=0.7):
-    """Select k files balancing relevance (score) and diversity (MMR).
-    already_read: paths to exclude (already processed in previous loops)
-    Returns: list of (path, score) tuples in selection order.
-    """
-    import numpy as np
-
-    # Candidates = files with known embeddings, not yet read
-    candidates = [(p, s) for p, s in file_scores.items() if p not in already_read and p in file_embeds]
-    if not candidates:
-        return []
-
-    # Normalize scores to [0,1] so relevance and similarity are on the same scale
-    scores = {p: s for p, s in candidates}
-    max_s = max(scores.values())
-    min_s = min(scores.values())
-    rng = max_s - min_s if max_s > min_s else 1.0   # Avoid divide-by-zero
-
-    selected = []           # [(path, score), ...] in selection order
-    selected_embeds = []    # Matching embeddings as numpy arrays (for fast cosine sim)
-
-    # Seed with already-read files: treat them as "already in the set" so MMR
-    # picks files DIFFERENT from what we've seen in previous loops.
-    for p in already_read:
-        if p in file_embeds:
-            selected_embeds.append(np.array(file_embeds[p], dtype=np.float32))
-
-    # Greedy selection: pick one file at a time that maximizes MMR score
-    for _ in range(min(k, len(candidates))):
-        best_path = None
-        best_mmr = -999
-
-        for p, s in candidates:
-            if p in [x[0] for x in selected]:
-                continue
-            norm_score = (s - min_s) / rng      # Relevance component (0-1)
-            emb = np.array(file_embeds[p], dtype=np.float32)
-
-            # Diversity component: find the MAX cosine similarity to any
-            # already-selected or already-read file (we want to minimize this).
-            max_sim = 0.0
-            for se in selected_embeds:
-                cos = float(np.dot(emb, se) / (np.linalg.norm(emb) * np.linalg.norm(se) + 1e-9))
-                if cos > max_sim:
-                    max_sim = cos
-
-            # MMR formula: reward relevance, penalize similarity to what we have
-            mmr = lam * norm_score - (1 - lam) * max_sim
-            if mmr > best_mmr:
-                best_mmr = mmr
-                best_path = p
-
-        if best_path is None:
-            break
-        selected.append((best_path, scores[best_path]))
-        selected_embeds.append(np.array(file_embeds[best_path], dtype=np.float32))
-
-    return selected
-
-
-# ── Step 2b: Deep retrieval loop ──────────────────────────────────
-# INPUT:  query (original), file_scores/meta/embeds (from Step 2)
-# OUTPUT: expanded ranked list (Step 2 results + files discovered by new terms)
-# METHOD: loop up to 3 times:
-#           1. MMR-pick 10 diverse files from current top results
-#           2. Extract first 500 chars of each
-#           3. Ask Claude: "what NEW search terms would find more files?"
-#           4. Embed those terms, run ChromaDB again, merge results
-# WHY:    Vector search misses files that use different vocabulary. After reading
-#         some results we know the domain jargon, so we can find semantic siblings.
-#         Stops early if no new terms or no new files found.
-def step_deep_retrieve(query, file_scores, file_meta, file_embeds):
-    """Read diverse results (MMR), extract new search terms, search again. Repeat."""
-    import cohere, chromadb
-
-    already_read = set()    # Track files we've already peeked at — don't re-read
-
-    for loop_num in range(1, DEEP_MAX_LOOPS + 1):
-        print(f'\n=== STEP 2b: Deep loop {loop_num}/{DEEP_MAX_LOOPS} ===', flush=True)
-        t0 = time.time()
-
-        # Pick 10 diverse files via MMR (not just top 10 by score, which would
-        # be near-duplicates). λ=0.7 = 70% relevance weight, 30% diversity.
-        mmr_picks = _mmr_select(file_scores, file_embeds, already_read,
-                                k=DEEP_PEEK_FILES, lam=0.7)
-        if not mmr_picks:
-            tprint('No more files to read — stopping')
-            break
-
-        tprint(f'MMR selected {len(mmr_picks)} diverse files:')
-        for p, s in mmr_picks:
-            tprint(f'  [{s:.3f}] {os.path.basename(p)}')
-
-        # Extract small snippets (500 chars each) — just enough for Claude to
-        # recognize domain vocabulary, not enough to overflow its context.
-        snippets = []
-        for path, score in mmr_picks:
-            already_read.add(path)      # Mark so MMR won't pick again next loop
-            text = extract_text(path, max_chars=1000)
-            fname = os.path.basename(path)
-            snippets.append(f'[{score:.3f}] {fname}: {text[:500]}')
-        snippets_text = '\n\n'.join(snippets)
-
-        # Ask Claude: what NEW terms should we search for?
-        prompt = (
-            f'You are helping a document search system find MORE relevant files.\n\n'
-            f'ORIGINAL QUESTION: {query}\n\n'
-            f'We already found these {len(mmr_picks)} files:\n{snippets_text}\n\n'
-            f'Based on what these files mention, what NEW search terms should we use '
-            f'to find ADDITIONAL relevant files that our current search missed?\n'
-            f'Look for: referenced documents, technical terms, people mentioned, '
-            f'project names, equipment, specific events, file names mentioned in emails.\n\n'
-            f'Return ONLY a JSON list of 3-5 new search phrases. '
-            f'Do NOT repeat terms we already searched for.\n'
-            f'Example: ["πυρασφάλεια αισθητήρες ΕΔΣ", "ΣχολιαIntracom", "site visit report"]\n'
-        )
-        raw = run_claude(prompt, timeout=45)
-
-        # Parse Claude's JSON array of new search terms
-        match = re.search(r'\[.*\]', raw, re.DOTALL)
-        new_terms = []
-        if match:
-            try:
-                new_terms = json.loads(match.group())
-            except json.JSONDecodeError:
-                pass
-
-        # Early exit: Claude couldn't think of anything new
-        if not new_terms:
-            tprint(f'No new terms found — stopping deep search')
-            break
-
-        tprint(f'New terms from loop {loop_num}:')
-        for t in new_terms:
-            tprint(f'  + {t}')
-
-        # Run the new terms through ChromaDB and merge results.
-        # _search_chromadb only increments new_found for actually-new paths.
-        prev_count = len(file_scores)
-        new_found = _search_chromadb(new_terms, file_scores, file_meta)
-        tprint(f'Found {new_found} new files ({prev_count} → {len(file_scores)}) in {time.time()-t0:.1f}s')
-
-        # Early exit: search saturated (found nothing beyond what we already have)
-        if new_found == 0:
-            tprint(f'No new files discovered — stopping deep search')
-            break
-
-    # After all loops: re-rank the full set (original + deep discoveries)
-    ranked = sorted(file_scores.items(), key=lambda x: -x[1])[:MAX_FILES]
-    tprint(f'Deep search complete: {len(file_scores)} total unique files, keeping top {len(ranked)}')
-    if ranked:
-        tprint(f'Score range after deep: {ranked[0][1]:.3f} — {ranked[-1][1]:.3f}')
-        for i, (p, s) in enumerate(ranked[:5]):
-            tprint(f'  {i+1}. [{s:.3f}] {os.path.basename(p)}')
-        if len(ranked) > 5:
-            tprint(f'  ... +{len(ranked)-5} more')
-    return [(path, score, file_meta[path]) for path, score in ranked]
-
-
-# ── Step 3: Extract text ─────────────────────────────────────────
-# INPUT:  top N (files, score, meta) tuples from Step 2
-# OUTPUT: list of dicts with extracted text ready for Step 4 agents
-# METHOD: dispatches each file through extract_text() which handles 10+ formats
-# NOTE:   sequential (not parallelized) — most extractors are fast, and parallel
-#         pdftotext/antiword would just contend for CPU.
-def step_extract(files):
-    print(f'\n=== STEP 3: Extract text from {len(files)} files ===', flush=True)
-    t0 = time.time()
-    extracted = []
-    errors = 0
-    ext_counts = {}             # extension → count (for diagnostics)
-    for path, score, meta in files:
-        text = extract_text(path)
-        e = meta.get('ext', os.path.splitext(path)[1])
-        ext_counts[e] = ext_counts.get(e, 0) + 1
-        # Detect extraction failures: extract_text returns "[error ...]" / "[... failed]"
-        if text.startswith('[') and ('error' in text or 'failed' in text):
-            errors += 1
-            tprint(f'  FAIL: {os.path.basename(path)} — {text[:60]}')
-        # Flatten to a dict the agents will consume
-        extracted.append({
-            'path': path,
-            'score': score,                          # Vector similarity from Step 2
-            'filename': os.path.basename(path),
-            'folder': meta.get('folder', ''),
-            'ext': meta.get('ext', ''),
-            'text': text                             # Up to MAX_FILE_CHARS chars
-        })
-    ok = len(extracted) - errors
-    ext_str = ', '.join(f'{v}×{k}' for k, v in sorted(ext_counts.items(), key=lambda x: -x[1]))
-    tprint(f'Extracted {ok} OK, {errors} errors in {time.time()-t0:.1f}s')
-    tprint(f'Types: {ext_str}')
-    total_chars = sum(len(f['text']) for f in extracted)
-    tprint(f'Total text: {total_chars:,} chars ({total_chars/1000:.0f}K)')
-    return extracted
-
-
-# ── Step 4: Parallel agents ──────────────────────────────────────
-# INPUT:  query + list of ~100 extracted file dicts
-# OUTPUT: list of agent_results, each with parsed rankings per batch
-# METHOD: split 100 files into batches of 10 → launch 10 Claude subprocesses
-#         (max 6 concurrent) → each agent RANKS its 10 files (score 0-10) with reasons
-# WHY:    Ranking 100 files in one Claude call would overflow context and lose
-#         accuracy. Parallel agents = 10x speedup + better attention per file.
-# COST:   10 claude -p calls × ~30s each = ~60s wall time (6-way parallel)
-def step_agents(query, extracted):
-    n_files = len(extracted)
-    n_batches = (n_files + BATCH_SIZE - 1) // BATCH_SIZE     # ceil(n/BATCH_SIZE)
-    print(f'\n=== STEP 4: {n_batches} parallel agents ({BATCH_SIZE} files each, {AGENT_WORKERS} workers) ===', flush=True)
-    t0 = time.time()
-
-    # Split into contiguous batches (preserves score-based ordering within each agent)
-    batches = []
-    for i in range(0, n_files, BATCH_SIZE):
-        batches.append(extracted[i:i+BATCH_SIZE])
-
-    # Show batch assignments
-    for i, batch in enumerate(batches):
-        fnames = ', '.join(f['filename'][:30] for f in batch[:4])
-        more = f' +{len(batch)-4}' if len(batch) > 4 else ''
-        raw_chars = sum(len(f['text']) for f in batch)
-        capped = f' → capped {MAX_AGENT_CHARS/1000:.0f}K' if raw_chars > MAX_AGENT_CHARS else ''
-        tprint(f'Agent {i+1}: {len(batch)} files ({raw_chars/1000:.0f}K chars{capped}) — {fnames}{more}')
-
-    def run_agent(batch_idx, batch):
-        """Run ONE ranking agent on ONE batch of 10 files (called in ThreadPoolExecutor)."""
-        # Build the files block, enforcing MAX_AGENT_CHARS total budget.
-        # If a single file would overflow, truncate it (head+tail) so we keep
-        # both the intro and the conclusion, which usually contain the most signal.
-        file_block = []
-        total_chars = 0
-        for j, f in enumerate(batch):
-            file_text = f['text']
-            remaining = MAX_AGENT_CHARS - total_chars
-            if remaining < 1000:
-                # Budget exhausted — include filename only (let agent know it exists)
-                file_block.append(
-                    f'--- FILE {j+1}: {f["filename"]} ---\n'
-                    f'Path: {f["path"]}\n'
-                    f'[text omitted — agent context full]\n'
-                )
-                continue
-            if len(file_text) > remaining:
-                # Head+tail truncation: 80% start + 20% end + marker in between
-                # Preserves opening context AND closing conclusions
-                keep = remaining - 200
-                head = int(keep * 0.8)
-                tail = int(keep * 0.2)
-                file_text = file_text[:head] + '\n[...truncated...]\n' + file_text[-tail:]
-            total_chars += len(file_text)
-            file_block.append(
-                f'--- FILE {j+1}: {f["filename"]} ---\n'
-                f'Path: {f["path"]}\n'
-                f'Vector score: {f["score"]:.3f}\n'
-                f'{file_text}\n'
-            )
-        files_text = '\n'.join(file_block)
-
-        prompt = (
-            f'You are evaluation agent #{batch_idx+1}. You have {len(batch)} files.\n'
-            f'Your ONLY job is to RANK these files by relevance to the question.\n'
-            f'Do NOT answer the question. Just evaluate each file.\n\n'
-            f'USER QUESTION: {query}\n\n'
-            f'FILES:\n{files_text}\n\n'
-            f'INSTRUCTIONS:\n'
-            f'For each file, score its relevance 0-10 (10=directly answers the question, '
-            f'0=completely irrelevant). Give a one-line reason.\n\n'
-            f'FORMAT your response EXACTLY as JSON:\n'
-            f'{{"rankings": [\n'
-            f'  {{"file": 1, "filename": "name.ext", "score": 8, "reason": "why relevant"}},\n'
-            f'  ...\n'
-            f']}}\n'
-            f'Return ONLY valid JSON. No other text.'
-        )
-
-        # Call Claude (4-minute timeout — enough for complex Greek files)
-        result = run_claude(prompt, timeout=240)
-        # Retry strategy: if timeout, try with only half the files.
-        # Common cause: one massive file pushing Claude's thinking over the limit.
-        if result == '[timeout]':
-            half = file_block[:len(file_block)//2]
-            shorter = '\n'.join(half)
-            prompt2 = prompt.replace(files_text, shorter)
-            result = run_claude(prompt2, timeout=240)
-        return batch_idx, result, batch
-
-    # Pre-allocate result slots by index so we can fill out-of-order (agents
-    # finish in unpredictable order due to variable file sizes)
-    agent_results = [None] * len(batches)
-    with ThreadPoolExecutor(max_workers=AGENT_WORKERS) as pool:
-        # Submit all batches; pool runs up to AGENT_WORKERS concurrently
-        futures = {
-            pool.submit(run_agent, i, b): i
-            for i, b in enumerate(batches)
-        }
-        for future in as_completed(futures):
-            idx = futures[future]
-            try:
-                batch_idx, result, batch = future.result()
-                agent_results[batch_idx] = {
-                    'raw': result,
-                    'batch': batch
-                }
-                # Parse rankings and show preview
-                parsed = _parse_rankings(result, batch)
-                agent_results[batch_idx]['parsed'] = parsed
-                top3 = [f'{r["filename"]}({r["score"]})' for r in parsed[:3]]
-                tprint(f'Agent {batch_idx+1}/{len(batches)} done — top: {", ".join(top3)}')
-            except Exception as e:
-                tprint(f'Agent {idx+1} failed: {e}')
-                agent_results[idx] = {
-                    'raw': f'[error: {e}]',
-                    'batch': batches[idx],
-                    'parsed': []
-                }
-
-    done = sum(1 for r in agent_results if r and r.get('parsed'))
-    tprint(f'{done}/{len(batches)} agents succeeded in {time.time()-t0:.1f}s')
-    return [r for r in agent_results if r is not None]
-
-
-def _parse_rankings(raw, batch):
-    """Extract the agent's JSON rankings from its raw stdout.
-    The prompt demands strict JSON format, but LLMs sometimes add prose before/after.
-    Strategy: grab first {...} block, parse, map file indices back to original batch.
-    Returns: list of dicts sorted by score desc, or [] on parse failure.
-    """
-    match = re.search(r'\{.*\}', raw, re.DOTALL)
-    if not match:
-        return []
-    try:
-        data = json.loads(match.group())
-        rankings = data.get('rankings', [])
-    except json.JSONDecodeError:
-        return []
-
-    # Agent uses 1-based file numbering in its output (matches the FILE 1/2/3 labels)
-    results = []
-    for r in rankings:
-        file_idx = r.get('file', 0) - 1     # Convert to 0-based Python index
-        if 0 <= file_idx < len(batch):       # Bounds check (agent might hallucinate indices)
-            results.append({
-                'filename': batch[file_idx]['filename'],
-                'path': batch[file_idx]['path'],
-                'text': batch[file_idx]['text'],       # Needed by Step 6 for final answer
-                'score': r.get('score', 0),            # Agent's 0-10 relevance score
-                'reason': r.get('reason', ''),         # Agent's one-line justification
-                'vector_score': batch[file_idx]['score']  # Original Step 2 vector similarity
-            })
-    # Sort this batch's results by agent score (Step 5 will merge across batches)
-    results.sort(key=lambda x: -x['score'])
-    return results
-
-
-# ── Step 5: Merge rankings ────────────────────────────────────────
-# INPUT:  list of agent_results (one per batch)
-# OUTPUT: top 15 files by agent score (with stem dedup)
-# METHOD: flatten all agent rankings → dedup by path → dedup by stem → sort → top 15
-# WHY:    Different agents can independently rank the same file if retrieval
-#         produces near-duplicates. Also email threads in different folders.
-TOP_FILES_FOR_ANSWER = 15       # How many files Step 6 feeds to final answer Claude
-
-def step_merge(agent_results):
-    print(f'\n=== STEP 5: Merge rankings from all agents ===', flush=True)
-    t0 = time.time()
-
-    # Flatten: collect every ranked entry across all agent batches
-    all_ranked = []
-    for ar in agent_results:
-        for r in ar.get('parsed', []):
-            all_ranked.append(r)
-
-    # Dedup pass 1: by exact path (same file ranked by >1 agent → keep best score)
-    by_path = {}
-    for r in all_ranked:
-        p = r['path']
-        if p not in by_path or r['score'] > by_path[p]['score']:
-            by_path[p] = r
-
-    # Dedup pass 2: by filename stem (see _file_stem — collapses email threads,
-    # backup copies, version variants). Uses tie-breaker: longer text wins.
-    by_stem = {}
-    for r in by_path.values():
-        stem = _file_stem(r['filename'])
-        if stem not in by_stem or r['score'] > by_stem[stem]['score']:
-            by_stem[stem] = r
-        elif r['score'] == by_stem[stem]['score']:
-            # Tie on score → prefer the one with more text (likely more info)
-            if len(r.get('text', '')) > len(by_stem[stem].get('text', '')):
-                by_stem[stem] = r
-
-    deduped_count = len(by_path) - len(by_stem)
-    # Final sort: highest agent score first (not vector score — agents have semantic understanding)
-    merged = sorted(by_stem.values(), key=lambda x: -x['score'])
-
-    tprint(f'{len(all_ranked)} rankings from agents → {len(by_path)} unique paths → {len(by_stem)} after stem dedup ({deduped_count} dupes removed)')
-
-    # Show top files
-    for i, r in enumerate(merged[:TOP_FILES_FOR_ANSWER]):
-        tprint(f'  {i+1:2d}. [agent:{r["score"]:2d} vec:{r["vector_score"]:.3f}] '
-               f'{r["filename"]} — {r["reason"][:60]}')
-
-    # Count irrelevant files (score <= 2)
-    irrelevant = sum(1 for r in merged if r['score'] <= 2)
-    tprint(f'Relevant (score>2): {len(merged)-irrelevant}, irrelevant: {irrelevant}')
-
-    return merged[:TOP_FILES_FOR_ANSWER]
-
-
-# ── Step 6: Final answer from original files ──────────────────────
-# INPUT:  query + top 15 files (from Step 5)
-# OUTPUT: formatted answer string with [filename] citations + SOURCES list
-# METHOD: one big Claude call with all 15 files' FULL extracted text
-# WHY:    Agents in Step 4 only saw their own 10 files. Step 6 Claude sees the
-#         top 15 together and can cross-reference, resolve contradictions, and
-#         synthesize a coherent answer. Uses 1M context window to fit everything.
-def step_final(query, top_files):
-    n = len(top_files)
-    print(f'\n=== STEP 6: Final answer (reading {n} original files) ===', flush=True)
-    t0 = time.time()
-    total_chars = sum(len(f['text']) for f in top_files)
-    tprint(f'Feeding {total_chars:,} chars ({total_chars/1000:.0f}K) of original file text to Claude')
-
-    # Build file block: each file includes the agent's relevance score and reason,
-    # so the final Claude knows WHY each file was chosen
-    file_block = []
-    for i, f in enumerate(top_files):
-        file_block.append(
-            f'--- FILE {i+1}: {f["filename"]} (relevance: {f["score"]}/10) ---\n'
-            f'Path: {f["path"]}\n'
-            f'Why relevant: {f["reason"]}\n'
-            f'CONTENT:\n{f["text"]}\n'
-        )
-    files_text = '\n'.join(file_block)
-
-    prompt = (
-        f'You have the {n} most relevant files to answer a question.\n'
-        f'These files were selected by evaluation agents from a larger set.\n'
-        f'Read them carefully and answer the question.\n\n'
-        f'USER QUESTION: {query}\n\n'
-        f'FILES:\n{files_text}\n\n'
-        f'INSTRUCTIONS:\n'
-        f'1. Answer the question using ONLY evidence from these files.\n'
-        f'2. Quote specific text, dates, names as evidence.\n'
-        f'3. CITE filenames [filename] inline for every claim.\n'
-        f'4. If files contradict each other, note both sides with sources.\n'
-        f'5. Be comprehensive — use all relevant files, not just the top one.\n'
-        f'6. At the end, list the files you used with a one-line summary each.\n\n'
-        f'FORMAT:\n'
-        f'ANSWER:\n[comprehensive answer with inline [filename] citations]\n\n'
-        f'SOURCES:\n'
-        f'1. filename — what it contributed\n'
-        f'2. ...\n'
-    )
-
-    # 5-minute timeout — this is the most important Claude call, give it time
-    result = run_claude(prompt, timeout=300)
-    if result == '[timeout]':
-        # Retry with top 8 files only (cuts prompt in half, often finishes in time)
-        tprint(f'WARNING: Final answer timed out at 300s — retrying with shorter prompt')
-        shorter_prompt = prompt.replace(files_text, '\n'.join(file_block[:8]))
-        result = run_claude(shorter_prompt, timeout=300)
-    tprint(f'Final answer in {time.time()-t0:.1f}s')
-    return result
-
-
-# ── Main ──────────────────────────────────────────────────────────
-# Orchestrator: parses CLI args, runs the 6 steps in order, prints final answer.
-# Exit codes: 0 = success, 1 = usage error.
 def main():
-    # Parse args — accepts "-deep" anywhere, query as first positional, n_results as second
-    args = sys.argv[1:]
-    deep_mode = False
-    if '-deep' in args:
-        deep_mode = True
-        args.remove('-deep')     # Remove flag so positional args still line up
+    parser = argparse.ArgumentParser(
+        prog='dsearch2-answer',
+        description='Passage-first answer pipeline (dsearch2 retriever + Claude synthesis)')
+    parser.add_argument('query', nargs='*', help='search query words')
+    parser.add_argument('--json', action='store_true', help='JSON output')
+    parser.add_argument('--top', '-n', type=int, default=DEFAULT_TOP_PASSAGES,
+                        help=f'passages to retrieve (default {DEFAULT_TOP_PASSAGES})')
+    parser.add_argument('--show-passages', action='store_true', help='show retrieved passages before answer')
+    parser.add_argument('--no-alias', action='store_true', help='disable alias expansion')
+    parser.add_argument('--cohere', action='store_true', help='use Cohere vector arm (faster, requires API key)')
+    parser.add_argument('--hyde', action='store_true', help='enable HyDE (hypothetical document embedding via Ollama)')
+    parser.add_argument('--model', type=str, default=None, help='Claude model override (e.g. claude-haiku-4-5-20251001)')
+    parser.add_argument('--dry-run', action='store_true', help='retrieve passages and build prompt but do not call Claude')
+    parser.add_argument('--max-per-file', type=int, default=DEFAULT_MAX_PER_FILE,
+                        help=f'max chunks per file in answer context (default {DEFAULT_MAX_PER_FILE})')
+    parser.add_argument('--no-diversity', action='store_true', help='disable per-file diversity cap')
+    args = parser.parse_args()
 
-    if not args:
-        print('Usage: dsearch-answer [-deep] "query" [n_results]')
-        print('  -deep  Multi-hop retrieval: read results, extract new terms, search again')
+    if not args.query:
+        parser.print_help()
+        sys.exit(0)
+
+    query_orig = ' '.join(args.query)
+
+    if args.model:
+        os.environ['DSEARCH2_MODEL'] = args.model
+
+    # retrieve passages via dsearch2
+    print(f'Retrieving passages for: "{query_orig}" ...', file=sys.stderr)
+    data = run_dsearch2(query_orig, args.top, no_alias=args.no_alias, cohere=args.cohere, hyde=args.hyde)
+    if data is None:
         sys.exit(1)
 
-    query = args[0]
-    n_results = int(args[1]) if len(args) > 1 else MAX_FILES
+    query_expanded = data.get('query_expanded', query_orig)
+    aliases_used = data.get('aliases_used', [])
+    passages = data.get('results', [])
+    message = data.get('message', '')
 
-    n_agents = (n_results + BATCH_SIZE - 1) // BATCH_SIZE
-    mode_str = 'DEEP' if deep_mode else 'standard'
-    print(f'\n{"="*56}')
-    print(f'  dsearch answer: CLexpand -> CLrank -> CLanswer')
-    print(f'  Mode:   {mode_str}')
-    print(f'  Query:  {query[:46]}')
-    print(f'  Files:  {n_results}  |  Agents: {n_agents}  |  Workers: {AGENT_WORKERS}')
-    print(f'{"="*56}')
-
-    t_start = time.time()
-
-    # ── Pipeline execution (see module docstring for flow) ──
-
-    # Step 1: Claude expands raw query into 5-8 search queries + HyDE
-    queries = step_understand(query)
-
-    # Step 2: Embed queries with Cohere, search ChromaDB, get top N files by path
-    # Returns full dicts because Step 2b (deep) needs file_embeds for MMR
-    files, file_scores, file_meta, file_embeds = step_retrieve(queries, n=n_results)
-    if not files and not file_scores:
-        print('\nNo files found.')
+    # empty collection handling
+    if not passages:
+        empty_msg = message or 'No passages found. Collection may be empty — run dsearch2-update first.'
+        if args.json:
+            print(build_json_output(query_orig, query_expanded, aliases_used, empty_msg, []))
+        else:
+            print(f'\n{empty_msg}')
+            if aliases_used:
+                print(f'Aliases expanded: {", ".join(aliases_used[:10])}')
         sys.exit(0)
 
-    # Step 2b: OPTIONAL — multi-hop retrieval (only with -deep flag)
-    # Reads diverse results, asks Claude for new terms, searches again (up to 3 loops)
-    if deep_mode:
-        files = step_deep_retrieve(query, file_scores, file_meta, file_embeds)
+    # show raw passages if requested
+    if args.show_passages and not args.json:
+        print_passages(passages)
 
-    if not files:
-        print('\nNo files found.')
+    # diversity filter
+    raw_count = len(passages)
+    raw_dist = file_distribution(passages[:DEFAULT_TOP_ANSWER])
+    if args.no_diversity:
+        answer_passages = passages
+    else:
+        answer_passages = apply_diversity_filter(passages, max_per_file=args.max_per_file)
+    filtered_count = len(answer_passages)
+    filtered_dist = file_distribution(answer_passages[:DEFAULT_TOP_ANSWER])
+
+    # renumber ranks for answer context (keep original rank in metadata)
+    for i, p in enumerate(answer_passages):
+        p['answer_rank'] = i + 1
+
+    # build context and prompt
+    context = build_context(answer_passages, max_passages=DEFAULT_TOP_ANSWER)
+    prompt = build_answer_prompt(query_orig, query_expanded, context)
+
+    if args.dry_run:
+        diversity_mode = 'OFF (--no-diversity)' if args.no_diversity else f'ON (max {args.max_per_file}/file)'
+        print(f'\n[DRY RUN] Diversity: {diversity_mode}')
+        print(f'Raw passages retrieved: {raw_count}')
+        print(f'After diversity filter: {filtered_count}')
+        print(f'Passages to Claude: {min(filtered_count, DEFAULT_TOP_ANSWER)}')
+        print(f'Prompt size: {len(prompt)} chars')
+        print(f'Query expanded: {query_expanded}')
+        if aliases_used:
+            print(f'Aliases: {", ".join(aliases_used[:10])}')
+        print(f'\nFile distribution BEFORE diversity (top {DEFAULT_TOP_ANSWER}):')
+        for fname, cnt in raw_dist.items():
+            print(f'  {fname}: {cnt}')
+        print(f'\nFile distribution AFTER diversity (top {DEFAULT_TOP_ANSWER}):')
+        for fname, cnt in filtered_dist.items():
+            print(f'  {fname}: {cnt}')
         sys.exit(0)
 
-    # Step 3: Extract plain text from each file (format-specific dispatch)
-    extracted = step_extract(files)
+    # call Claude for synthesis
+    print(f'Synthesizing answer from {min(filtered_count, DEFAULT_TOP_ANSWER)} passages ...', file=sys.stderr)
+    answer = run_claude(prompt, timeout=120)
 
-    # Step 4: Spawn 10 parallel Claude agents — each ranks 10 files 0-10 with reasons
-    agent_results = step_agents(query, extracted)
+    if answer.startswith('[timeout]') or answer.startswith('[error'):
+        print(f'ERROR: Claude failed: {answer}', file=sys.stderr)
+        sys.exit(1)
 
-    # Step 5: Merge rankings across all agents, dedup by path+stem, take top 15
-    top_files = step_merge(agent_results)
-    if not top_files:
-        print('\nNo relevant files found by agents.')
-        sys.exit(0)
-
-    # Step 6: Final Claude reads top 15 originals → comprehensive answer with citations
-    answer = step_final(query, top_files)
-
-    # Print result
-    total = time.time() - t_start
-    print(f'\n{"="*56}')
-    print(answer)
-    print(f'\n{"="*56}')
-    deep_str = ' (deep)' if deep_mode else ''
-    print(f'Total: {total:.1f}s{deep_str}  |  {len(queries)} queries -> {len(files)} files '
-          f'-> {len(agent_results)} agents ranked -> top {len(top_files)} -> answer')
-
+    used = answer_passages[:DEFAULT_TOP_ANSWER]
+    # output
+    if args.json:
+        print(build_json_output(query_orig, query_expanded, aliases_used, answer, used))
+    else:
+        if aliases_used:
+            print(f'Aliases expanded: {", ".join(aliases_used[:10])}')
+        diversity_note = '' if args.no_diversity else f', max {args.max_per_file}/file'
+        print(f'\n{"="*60}')
+        print('ANSWER')
+        print(f'{"="*60}\n')
+        print(answer)
+        print(f'\n{"="*60}')
+        print(f'Based on {len(used)} passages from {len(set(p["path"] for p in used))} files{diversity_note}')
 
 if __name__ == '__main__':
     main()

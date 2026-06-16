@@ -1,70 +1,68 @@
 #!/usr/bin/env python3
-# dsearch2 — Hybrid semantic+lexical retriever (vector + TF + RRF).
-# Read-only: does NOT modify ChromaDB.
-# Keywords: dsearch2, semantic search, hybrid, BM25, RRF, alias, passage retriever
-#
-# Run inside the gte-embed venv (or any venv that has cohere + chromadb):
-#   ~/venvs/gte-embed/bin/python3 scripts/dsearch2 "my query"
-# Or install into PATH:
-#   sudo ln -sf $(pwd)/scripts/dsearch2 /usr/local/bin/dsearch2
-#   sudo chmod +x /usr/local/bin/dsearch2
-import sys, os, json, re, argparse, math, unicodedata
+# dsearch2 — Read-only hybrid retriever for fulldisk-1k (vector + weighted RRF + Recoll BM25 classify).
+# Does NOT modify ChromaDB. Does NOT call dsearch2-update or v1 dsearch.
+# Keywords: dsearch2, semantic search, hybrid, BM25, RRF, alias, passage retriever, recoll
+import sys, os, json, re, argparse, math, unicodedata, hashlib, subprocess
 from collections import Counter
 
-# ── Config — reads from ~/.config/dsearch/.env if set ───────────────────────
-
-def _env(key, default):
-    return os.environ.get(key, default)
-
-# Set CHROMADB_DIR and DSEARCH_COLLECTION in your ~/.config/dsearch/.env
-CHROMA_DIR   = _env('CHROMADB_DIR',    os.path.expanduser('~/.local/share/dsearch/chromadb'))
-COLLECTION   = _env('DSEARCH_COLLECTION', 'fulldisk-1k')
+# ── Constants ───────────────────────────────────────────────────────────────
+CHROMA_DIR   = './chromadb-data'
+SQLITE_DB    = os.path.join(CHROMA_DIR, 'chunks.db')
+COLLECTION   = 'fulldisk-1k'
+BGE_COLLECTION = 'fulldisk-1k-bge'
 COHERE_MODEL = 'embed-multilingual-v3.0'
-ALIAS_PATH   = _env('DSEARCH_ALIAS_MAP',
-                    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                 'configs', 'alias_map.json'))
-
-RRF_K        = 60  # RRF damping constant (standard value; increase if top results feel too repetitive)
+BGE_MODEL    = 'BAAI/bge-m3'
+ALIAS_PATH   = './configs/alias_map.json'
+RRF_K        = 60  # RRF damping constant
 # source-tier tiebreaker (tiny — relevance dominates)
 TIER_BOOST   = {'A': 0.004, 'B': 0.002, 'C': 0.0, 'D': -0.002}
 DEFAULT_TOP  = 20
+# v7.1 weighted RRF channel weights
+W_VEC            = 0.0    # Cohere vector — off by default (BGE-only won 42/70 vs 38/70)
+W_TF             = 1.0    # simple TF — grid search optimal (v7.1c)
+W_RECOLL_PATH    = 1.5    # Recoll path-classified matches — grid search optimal
+W_RECOLL_CONTENT = 0.0    # content-only Recoll = noise; disabled by grid search
+W_BGE            = 1.0    # BGE-M3 local model — primary vector signal (v7.2)
+W_FTS5           = 0.0    # disabled: grid-search proved lexical axis saturated (0 gains, 1-2 regressions at all weights)
+# vector protection: strong vector hits can't be buried by noisy Recoll
+VEC_PROTECT_5    = 10     # vec top-5 must stay in RRF top-10
+VEC_PROTECT_15   = 20     # vec top-15 must stay in RRF top-20
 
-# Paths that are part of this project's own metadata — slightly penalised when
-# the query is NOT about the search tool itself, so the tool doesn't surface its
-# own docs for unrelated queries. Set DSEARCH_META_PREFIXES="" to disable.
-_raw_prefixes = _env('DSEARCH_META_PREFIXES', '')
-PROJECT_META_PREFIXES = [p.strip() for p in _raw_prefixes.split(':') if p.strip()]
+PROJECT_META_PREFIXES = [
+    './',
+    './legacy-search/',
+    './',
+]
 PROJECT_PENALTY = -0.008
 PROJECT_QUERY_TERMS = {
     'dsearch', 'dsearch2', 'semantic', 'search', 'chromadb', 'chroma',
     'benchmark', 'eval', 'status', 'retrieval', 'embedding', 'cohere',
-    'phase', 'tier', 'classifier', 'rrf',
+    'phase', 'c8', 'c7', 'c6', 'c5', 'tier', 'classifier', 'rrf',
 }
 
-# ── API key loader ────────────────────────────────────────────────────────────
+# ── API key loader (same pattern as dsearch2-update) ────────────────────────
 
 def load_env_keys():
-    # Load ~/.config/dsearch/.env into os.environ (COHERE_API_KEY etc.)
-    env_file = os.path.expanduser('~/.config/dsearch/.env')
+    # load ~/.env into os.environ (COHERE_API_KEY etc)
     try:
-        with open(env_file) as f:
+        with open('~/.env') as f:
             for line in f:
-                line = line.strip()
                 if '=' in line and not line.startswith('#'):
-                    k, v = line.split('=', 1)
-                    os.environ.setdefault(k.strip(), v.strip())
-    except FileNotFoundError:
+                    k, v = line.strip().split('=', 1)
+                    os.environ[k] = v
+    except Exception:
         pass
 
-# ── Alias map ────────────────────────────────────────────────────────────────
+# ── Alias map ───────────────────────────────────────────────────────────────
 
 def _norm(s):
-    # lowercase + strip Greek accents for fuzzy matching
+    # lowercase + strip Greek accents for matching
     nfkd = unicodedata.normalize('NFKD', s.lower())
     return ''.join(c for c in nfkd if unicodedata.category(c) != 'Mn')
 
 def load_aliases(path=ALIAS_PATH):
     # returns (normed_key → set_of_original_aliases, max_phrase_len)
+    # keys are accent-stripped lowercase for fuzzy matching
     try:
         with open(path) as f:
             data = json.load(f)
@@ -81,15 +79,16 @@ def load_aliases(path=ALIAS_PATH):
     return amap, max_words
 
 def expand_query(query, alias_map, max_phrase_len=3):
-    # Expand query using alias map, supporting multi-word phrases.
-    # Scans with sliding window (longest-first) to avoid partial-phrase collisions.
+    # expand query using alias map, supporting multi-word phrases
+    # scans with sliding window (longest-first) for phrase matches
     tokens = query.lower().split()
     normed_tokens = [_norm(t) for t in tokens]
     expanded = list(tokens)
     aliases_used = []
     seen = set(_norm(t) for t in tokens)
-    matched_spans = set()
+    matched_spans = set()  # track which token positions were matched as phrases
 
+    # longest-first: try trigrams, bigrams, then unigrams
     for window in range(min(max_phrase_len, len(tokens)), 0, -1):
         for i in range(len(tokens) - window + 1):
             if any(j in matched_spans for j in range(i, i + window)):
@@ -107,32 +106,63 @@ def expand_query(query, alias_map, max_phrase_len=3):
 
     return ' '.join(expanded), sorted(aliases_used)
 
-# ── Lexical TF scoring (over returned chunks only) ────────────────────────────
+# ── Lexical TF scoring (over returned chunks only) ─────────────────────────
 
 def strip_accents(s):
+    # remove Greek accents for fuzzy matching
     nfkd = unicodedata.normalize('NFKD', s)
     return ''.join(c for c in nfkd if unicodedata.category(c) != 'Mn')
 
 def tf_score(text, query_terms):
-    # 1 + log(1+tf) per matched query term (accent/case-insensitive)
+    # simple TF: count how many query terms appear in the text (case/accent-insensitive)
     text_lower = strip_accents(text.lower())
     score = 0
     for term in query_terms:
         term_clean = strip_accents(term.lower())
         if len(term_clean) < 2:
             continue
+        # count occurrences (bounded to avoid one term dominating)
         count = text_lower.count(term_clean)
         if count > 0:
-            score += 1 + math.log(1 + count)
+            score += 1 + math.log(1 + count)  # 1 + log(1+tf) per matched term
     return score
 
-# ── RRF merge ─────────────────────────────────────────────────────────────────
+# ── Greek month normalization ──────────────────────────────────────────────
 
-def rrf_merge(vec_ranked_ids, tf_ranked_ids, chunk_data, k=RRF_K, query_text=''):
-    # score = 1/(k+vec_rank) + 1/(k+tf_rank) + tier_boost + project_penalty
+GREEK_MONTH_STEMS = {
+    'ιανουαρ': '01', 'φεβρουαρ': '02', 'μαρτ': '03', 'απριλ': '04',
+    'μαϊ': '05', 'μαι': '05', 'ιουν': '06', 'ιουλ': '07', 'αυγουστ': '08',
+    'σεπτεμβρ': '09', 'οκτωβρ': '10', 'νοεμβρ': '11', 'δεκεμβρ': '12',
+}
+
+def greek_month_to_num(term):
+    """Convert Greek month name/inflection to 2-digit number, or None."""
+    t = strip_accents(term.lower())
+    for stem, num in GREEK_MONTH_STEMS.items():
+        if t.startswith(stem):
+            return num
+    return None
+
+# ── RRF merge ───────────────────────────────────────────────────────────────
+
+def rrf_merge(vec_ranked_ids, tf_ranked_ids, chunk_data, k=RRF_K, query_text='',
+              recoll_path_ids=None, recoll_content_ids=None, bge_ranked_ids=None,
+              fts5_ranked_ids=None):
     all_ids = set(vec_ranked_ids) | set(tf_ranked_ids)
+    if recoll_path_ids:
+        all_ids |= set(recoll_path_ids)
+    if recoll_content_ids:
+        all_ids |= set(recoll_content_ids)
+    if bge_ranked_ids:
+        all_ids |= set(bge_ranked_ids)
+    if fts5_ranked_ids:
+        all_ids |= set(fts5_ranked_ids)
     vec_rank = {cid: rank for rank, cid in enumerate(vec_ranked_ids)}
     tf_rank  = {cid: rank for rank, cid in enumerate(tf_ranked_ids)}
+    rp_rank  = {cid: rank for rank, cid in enumerate(recoll_path_ids)} if recoll_path_ids else {}
+    rc_rank  = {cid: rank for rank, cid in enumerate(recoll_content_ids)} if recoll_content_ids else {}
+    bge_rank = {cid: rank for rank, cid in enumerate(bge_ranked_ids)} if bge_ranked_ids else {}
+    fts5_rank = {cid: rank for rank, cid in enumerate(fts5_ranked_ids)} if fts5_ranked_ids else {}
     max_rank = len(all_ids) + 1
 
     q_words = set(_norm(query_text).split()) if query_text else set()
@@ -142,14 +172,26 @@ def rrf_merge(vec_ranked_ids, tf_ranked_ids, chunk_data, k=RRF_K, query_text='')
     for cid in all_ids:
         vr = vec_rank.get(cid, max_rank)
         tr = tf_rank.get(cid, max_rank)
+        rpr = rp_rank.get(cid, max_rank)
+        rcr = rc_rank.get(cid, max_rank)
+        bgr = bge_rank.get(cid, max_rank)
+        f5r = fts5_rank.get(cid, max_rank)
         tier = chunk_data.get(cid, {}).get('tier', 'D')
         boost = TIER_BOOST.get(tier, 0.0)
         path = chunk_data.get(cid, {}).get('path', '')
         penalty = 0.0
-        if PROJECT_META_PREFIXES and not is_project_query:
-            if any(path.startswith(pfx) for pfx in PROJECT_META_PREFIXES):
-                penalty = PROJECT_PENALTY
-        scores[cid] = 1.0 / (k + vr) + 1.0 / (k + tr) + boost + penalty
+        if not is_project_query and any(path.startswith(pfx) for pfx in PROJECT_META_PREFIXES):
+            penalty = PROJECT_PENALTY
+        score = W_VEC / (k + vr) + W_TF / (k + tr) + boost + penalty
+        if recoll_path_ids:
+            score += W_RECOLL_PATH / (k + rpr)
+        if recoll_content_ids:
+            score += W_RECOLL_CONTENT / (k + rcr)
+        if bge_ranked_ids:
+            score += W_BGE / (k + bgr)
+        if fts5_ranked_ids:
+            score += W_FTS5 / (k + f5r)
+        scores[cid] = score
 
     tier_order = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
     ranked = sorted(scores.keys(),
@@ -161,13 +203,50 @@ def rrf_merge(vec_ranked_ids, tf_ranked_ids, chunk_data, k=RRF_K, query_text='')
                     ))
     return ranked, scores
 
-# ── Cohere embed ──────────────────────────────────────────────────────────────
+# ── Vector protection ──────────────────────────────────────────────────────
+
+def dedup_per_file(ranked, chunk_data, max_per_file=1):
+    """Keep at most max_per_file chunks per unique file path."""
+    seen = {}
+    result = []
+    for cid in ranked:
+        path = chunk_data.get(cid, {}).get('path', '')
+        seen[path] = seen.get(path, 0) + 1
+        if seen[path] <= max_per_file:
+            result.append(cid)
+    return result
+
+def vector_protect(ranked, vec_ranked_ids):
+    """Prevent strong vector hits from being buried by noisy Recoll content.
+    Batch remove→insert to avoid sequential position shifting."""
+    rrf_pos = {cid: i for i, cid in enumerate(ranked)}
+    protect_5 = []
+    protect_15 = []
+    for vec_r, cid in enumerate(vec_ranked_ids):
+        rrf_r = rrf_pos.get(cid)
+        if rrf_r is None:
+            continue
+        if vec_r < 5 and rrf_r >= VEC_PROTECT_5:
+            protect_5.append(cid)
+        elif vec_r < 15 and rrf_r >= VEC_PROTECT_15:
+            protect_15.append(cid)
+    if not protect_5 and not protect_15:
+        return ranked
+    all_protected = set(protect_5 + protect_15)
+    base = [cid for cid in ranked if cid not in all_protected]
+    for cid in reversed(protect_15):
+        base.insert(min(VEC_PROTECT_15 - 1, len(base)), cid)
+    for cid in reversed(protect_5):
+        base.insert(min(VEC_PROTECT_5 - 1, len(base)), cid)
+    return base
+
+# ── Cohere embed ────────────────────────────────────────────────────────────
 
 def embed_query(query_text):
     import cohere
     api_key = os.environ.get('COHERE_API_KEY', '')
     if not api_key:
-        print('ERROR: COHERE_API_KEY not set. Add it to ~/.config/dsearch/.env', file=sys.stderr)
+        print('ERROR: COHERE_API_KEY not found. Check ~/.env', file=sys.stderr)
         sys.exit(1)
     co = cohere.ClientV2(api_key=api_key)
     resp = co.embed(
@@ -178,7 +257,41 @@ def embed_query(query_text):
     )
     return resp.embeddings.float_[0]
 
-# ── ChromaDB query ────────────────────────────────────────────────────────────
+# ── BGE-M3 embed (local, CPU) ─────────────────────────────────────────────
+
+_bge_model = None
+
+def embed_query_bge(query_text):
+    global _bge_model
+    if _bge_model is None:
+        from sentence_transformers import SentenceTransformer
+        _bge_model = SentenceTransformer(BGE_MODEL)
+        _bge_model.max_seq_length = 256
+    emb = _bge_model.encode([query_text], normalize_embeddings=True)
+    return emb[0].tolist()
+
+def generate_hyde_doc(query_text, model='qwen2.5:7b'):
+    """Generate a hypothetical document via Ollama for HyDE embedding."""
+    import requests
+    prompt = (
+        "Write a realistic document snippet that would be found by this search query. "
+        "Same language as the query. Include specific terms, names, dates. 50-80 words. "
+        "Just the document text.\n\n"
+        f"Query: {query_text}\n\nDocument:"
+    )
+    try:
+        resp = requests.post('http://localhost:11434/api/generate', json={
+            'model': model,
+            'prompt': prompt,
+            'stream': False,
+            'options': {'temperature': 0.3, 'num_predict': 120}
+        }, timeout=60)
+        doc = resp.json().get('response', '').strip()
+        return f"{query_text} {doc}"
+    except Exception:
+        return query_text
+
+# ── ChromaDB query ──────────────────────────────────────────────────────────
 
 def query_chromadb(embedding, n_results):
     import chromadb
@@ -190,8 +303,7 @@ def query_chromadb(embedding, n_results):
     count = col.count()
     if count == 0:
         return None, 0
-    # Fetch more than needed for TF re-ranking.
-    # min 1000: HNSW recall degrades on 950K+ collections when candidate pool is too small.
+    # fetch more than needed for TF reranking — min 1000 for HNSW recall on 950K+ collection
     fetch_n = min(max(n_results * 3, 1000), count)
     results = col.query(
         query_embeddings=[embedding],
@@ -200,7 +312,184 @@ def query_chromadb(embedding, n_results):
     )
     return results, count
 
-# ── Output formatting ─────────────────────────────────────────────────────────
+def query_bge_chromadb(embedding, n_results):
+    import chromadb
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
+    try:
+        col = client.get_collection(BGE_COLLECTION)
+    except Exception:
+        return None, 0
+    count = col.count()
+    if count == 0:
+        return None, 0
+    fetch_n = min(max(n_results * 3, 1000), count)
+    results = col.query(
+        query_embeddings=[embedding],
+        n_results=fetch_n,
+        include=['documents', 'metadatas', 'distances']
+    )
+    return results, count
+
+# ── Recoll BM25 search (filename + content, parallel candidate source) ─────
+
+RECOLL_CONFDIR = '~/.recoll'
+RECOLL_MAX     = 300
+
+def file_id_prefix(path):
+    return hashlib.md5(path.encode('utf-8', errors='ignore')).hexdigest()[:12]
+
+def classify_recoll_match(path, query_terms):
+    """Count query terms found in file path (accent-insensitive) + month normalization."""
+    path_norm = strip_accents(path.lower())
+    matches = 0
+    for term in query_terms:
+        term_norm = strip_accents(term.lower())
+        if len(term_norm) < 3:
+            continue
+        if term_norm in path_norm:
+            matches += 1
+        else:
+            month_num = greek_month_to_num(term)
+            if month_num and month_num in path_norm:
+                matches += 1
+    return matches
+
+def recoll_search(query_text, max_results=RECOLL_MAX):
+    try:
+        sys.path.insert(0, '/usr/lib/python3/dist-packages')
+        from recoll import recoll as rcl
+        db = rcl.connect(confdir=RECOLL_CONFDIR)
+        q = db.query()
+        # OR mode: BM25/IDF ranking puts multi-match docs higher naturally
+        terms = query_text.split()
+        or_query = ' OR '.join(terms) if len(terms) > 1 else query_text
+        q.execute(or_query)
+        paths = []
+        seen = set()
+        for i in range(min(max_results * 2, q.rowcount)):
+            doc = q.fetchone()
+            if doc is None:
+                break
+            url = doc.url or ''
+            if url.startswith('file://'):
+                p = url[7:]
+            else:
+                p = url
+            if p and p not in seen:
+                seen.add(p)
+                paths.append(p)
+            if len(paths) >= max_results:
+                break
+        return paths
+    except Exception as e:
+        print(f'Recoll search failed: {e}', file=sys.stderr)
+        return []
+
+_sqlite_conn = None
+def get_sqlite():
+    global _sqlite_conn
+    if _sqlite_conn is None:
+        import sqlite3
+        _sqlite_conn = sqlite3.connect(SQLITE_DB)
+        _sqlite_conn.execute('PRAGMA mmap_size=268435456')
+    return _sqlite_conn
+
+def sqlite_fetch_texts(ids):
+    """Fetch chunk texts from SQLite by ID. Returns dict {id: text}."""
+    if not ids:
+        return {}
+    conn = get_sqlite()
+    result = {}
+    for i in range(0, len(ids), 500):
+        batch = ids[i:i+500]
+        placeholders = ','.join(['?'] * len(batch))
+        cur = conn.execute(f'SELECT id, text FROM chunks WHERE id IN ({placeholders})', batch)
+        for row in cur:
+            result[row[0]] = row[1]
+    return result
+
+def fetch_recoll_chunks(col, recoll_paths, existing_chunk_data):
+    new_ids_to_fetch = []
+    path_to_cid = {}
+    for path in recoll_paths:
+        h = file_id_prefix(path)
+        cid = f'{h}_1k_0'
+        path_to_cid[path] = cid
+        if cid not in existing_chunk_data:
+            new_ids_to_fetch.append(cid)
+
+    new_chunk_data = {}
+    if new_ids_to_fetch:
+        texts = sqlite_fetch_texts(new_ids_to_fetch)
+        conn = get_sqlite()
+        id_placeholders = ','.join(['?'] * len(new_ids_to_fetch))
+        cur = conn.execute(
+            f'SELECT id, path, tier FROM chunks WHERE id IN ({id_placeholders})',
+            new_ids_to_fetch)
+        meta_map = {r[0]: {'path': r[1], 'tier': r[2]} for r in cur}
+        for cid in new_ids_to_fetch:
+            if cid in texts:
+                m = meta_map.get(cid, {})
+                new_chunk_data[cid] = {
+                    'text': texts[cid],
+                    'path': m.get('path', ''),
+                    'tier': m.get('tier', 'D'),
+                    'vec_dist': 999.0,
+                }
+
+    recoll_ranked = []
+    for path in recoll_paths:
+        cid = path_to_cid.get(path)
+        if cid and (cid in existing_chunk_data or cid in new_chunk_data):
+            recoll_ranked.append(cid)
+
+    return recoll_ranked, new_chunk_data
+
+# ── FTS5 BM25 search (SQLite full-text, lexical arm) ─────────────────────
+
+FTS5_MAX = 300
+
+def fts5_search(query_text, existing_chunk_data, limit=FTS5_MAX):
+    """Query SQLite FTS5 index. Returns (ranked_ids, new_chunk_data)."""
+    conn = get_sqlite()
+    terms = query_text.split()
+    if not terms:
+        return [], {}
+    fts_query = ' OR '.join(f'"{t}"' for t in terms if len(t) >= 2)
+    if not fts_query:
+        return [], {}
+    try:
+        cur = conn.execute(
+            'SELECT id, path, rank FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?',
+            (fts_query, limit))
+        rows = cur.fetchall()
+    except Exception:
+        return [], {}
+    ranked_ids = []
+    new_ids = []
+    for row in rows:
+        cid, path, _rank = row
+        ranked_ids.append(cid)
+        if cid not in existing_chunk_data:
+            new_ids.append(cid)
+    new_chunk_data = {}
+    if new_ids:
+        texts = sqlite_fetch_texts(new_ids)
+        id_ph = ','.join(['?'] * len(new_ids))
+        cur2 = conn.execute(f'SELECT id, path, tier FROM chunks WHERE id IN ({id_ph})', new_ids)
+        meta_map = {r[0]: {'path': r[1], 'tier': r[2]} for r in cur2}
+        for cid in new_ids:
+            if cid in texts:
+                m = meta_map.get(cid, {})
+                new_chunk_data[cid] = {
+                    'text': texts[cid],
+                    'path': m.get('path', ''),
+                    'tier': m.get('tier', 'D'),
+                    'vec_dist': 999.0,
+                }
+    return ranked_ids, new_chunk_data
+
+# ── Output formatting ───────────────────────────────────────────────────────
 
 TIER_LABEL = {'A': '\033[32mA\033[0m', 'B': '\033[34mB\033[0m',
               'C': '\033[33mC\033[0m', 'D': '\033[90mD\033[0m'}
@@ -212,6 +501,7 @@ def print_terminal(ranked_ids, scores, chunk_data, top_n):
         label = TIER_LABEL.get(tier, tier)
         path = cd.get('path', '?')
         score = scores[cid]
+        # truncate text preview to 120 chars
         text = cd.get('text', '').replace('\n', ' ')[:120]
         print(f'{i+1:3d}. [{label}] {score:.4f}  {path}')
         print(f'     {text}')
@@ -236,27 +526,41 @@ def build_json_output(ranked_ids, scores, chunk_data, top_n, query_orig, query_e
         'results': results
     }, ensure_ascii=False, indent=2)
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Main ────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
         prog='dsearch2',
-        description='Hybrid semantic+lexical retriever (vector + TF + RRF). Read-only.')
+        description='Hybrid semantic+lexical retriever for fulldisk-1k (read-only)')
     parser.add_argument('query', nargs='*', help='search query words')
-    parser.add_argument('--json',         action='store_true', help='JSON output')
-    parser.add_argument('--top', '-n',    type=int, default=DEFAULT_TOP,
-                        help=f'number of results (default {DEFAULT_TOP})')
-    parser.add_argument('--show-aliases', action='store_true',
-                        help='print alias groups and exit')
-    parser.add_argument('--no-alias',     action='store_true',
-                        help='disable alias expansion')
-    parser.add_argument('--debug',        action='store_true',
-                        help='print debug info (ranks, scores, fetch count)')
+    parser.add_argument('--json', action='store_true', help='JSON output')
+    parser.add_argument('--top', '-n', type=int, default=DEFAULT_TOP, help=f'number of results (default {DEFAULT_TOP})')
+    parser.add_argument('--show-aliases', action='store_true', help='print alias map and exit')
+    parser.add_argument('--no-alias', action='store_true', help='disable alias expansion')
+    parser.add_argument('--no-recoll', action='store_true', help='disable Recoll BM25 candidate source')
+    parser.add_argument('--no-dedup', action='store_true', help='disable per-file deduplication (allow multiple chunks per file)')
+    parser.add_argument('--no-bge', action='store_true', help='disable BGE-M3 vector arm')
+    parser.add_argument('--cohere', action='store_true', help='enable Cohere vector arm (requires COHERE_API_KEY)')
+    parser.add_argument('--no-fts5', action='store_true', help='disable SQLite FTS5 BM25 lexical arm')
+    parser.add_argument('--fts5-weight', type=float, default=None, help='override FTS5 arm weight (for grid search, default 0.5)')
+    parser.add_argument('--hyde', action='store_true', help='HyDE: generate hypothetical document via Ollama before BGE embedding')
+    parser.add_argument('--hyde-model', default='qwen2.5:7b', help='Ollama model for HyDE (default: qwen2.5:7b)')
+    parser.add_argument('--debug', action='store_true', help='print debug info (ranks, scores)')
     args = parser.parse_args()
 
-    load_env_keys()
+    use_cohere = args.cohere
+    use_bge = not args.no_bge
+    if not use_cohere and not use_bge:
+        print('ERROR: --no-bge requires --cohere (need at least one vector model)', file=sys.stderr)
+        sys.exit(1)
 
+    # load API keys (only needed for Cohere)
+    if use_cohere:
+        load_env_keys()
+
+    # show aliases mode
     if args.show_aliases:
+        amap_raw = {}
         try:
             with open(ALIAS_PATH) as f:
                 amap_raw = json.load(f)
@@ -269,19 +573,19 @@ def main():
         print(f'\n{len(amap_raw.get("aliases", []))} alias groups loaded.')
         sys.exit(0)
 
-    if not args.query:
+    # require query
+    query_words = args.query
+    if not query_words:
         parser.print_help()
         sys.exit(0)
-    query_orig = ' '.join(args.query)
+    query_orig = ' '.join(query_words)
 
+    # alias expansion
     if args.no_alias:
         alias_map, max_phr = {}, 1
     else:
         alias_map, max_phr = load_aliases()
-    query_exp, aliases_used = (
-        expand_query(query_orig, alias_map, max_phr) if alias_map
-        else (query_orig, [])
-    )
+    query_exp, aliases_used = expand_query(query_orig, alias_map, max_phr) if alias_map else (query_orig, [])
 
     if args.debug:
         print(f'Query original: {query_orig}', file=sys.stderr)
@@ -289,46 +593,162 @@ def main():
         if aliases_used:
             print(f'Aliases used:   {aliases_used}', file=sys.stderr)
 
-    embedding = embed_query(query_exp)
+    # Activate Cohere weights when --cohere is set
+    global W_VEC, W_BGE, W_FTS5
+    if use_cohere and use_bge:
+        W_VEC = 1.0; W_BGE = 0.5
+    elif use_cohere:
+        W_VEC = 1.0; W_BGE = 0.0
+    if args.fts5_weight is not None:
+        W_FTS5 = args.fts5_weight
 
-    results, total_chunks = query_chromadb(embedding, args.top)
-    if results is None or total_chunks == 0:
-        msg = f'Collection "{COLLECTION}" has 0 chunks. Run dsearch2-update first.'
+    # Embed with active model(s) and query ChromaDB
+    import chromadb
+    _client = chromadb.PersistentClient(path=CHROMA_DIR)
+    _col_cohere = _client.get_collection(COLLECTION)
+    total_chunks = _col_cohere.count()
+
+    chunk_data = {}
+    vec_ranked = None
+    bge_ranked = None
+    primary_ids = []
+
+    if use_bge:
+        bge_search_text = query_exp
+        if args.hyde:
+            hyde_doc = generate_hyde_doc(query_exp, model=args.hyde_model)
+            bge_search_text = hyde_doc
+            if args.debug:
+                print(f'  HyDE doc ({len(hyde_doc)} chars): {hyde_doc[:120]}...', file=sys.stderr)
+        bge_embedding = embed_query_bge(bge_search_text)
+        _col_bge = _client.get_collection(BGE_COLLECTION)
+        bge_count = _col_bge.count()
+        fetch_n = min(max(args.top * 3, 1000), bge_count)
+        bge_results = _col_bge.query(
+            query_embeddings=[bge_embedding], n_results=fetch_n,
+            include=['metadatas', 'distances'])
+        bge_ids = bge_results['ids'][0]
+        bge_metas = bge_results['metadatas'][0]
+        bge_dists = bge_results['distances'][0]
+        bge_ranked = list(bge_ids)
+        bge_idx = {cid: i for i, cid in enumerate(bge_ids)}
+        texts = sqlite_fetch_texts(list(bge_ids))
+        for cid in bge_ids:
+            bi = bge_idx[cid]
+            meta = bge_metas[bi] if bge_metas else {}
+            chunk_data[cid] = {
+                'text': texts.get(cid, ''),
+                'path': meta.get('path', ''),
+                'tier': meta.get('tier', 'D'),
+                'vec_dist': bge_dists[bi],
+            }
+        primary_ids = list(bge_ids)
+
+    if use_cohere:
+        embedding = embed_query(query_exp)
+        fetch_n = min(max(args.top * 3, 1000), total_chunks)
+        results = _col_cohere.query(
+            query_embeddings=[embedding], n_results=fetch_n,
+            include=['documents', 'metadatas', 'distances'])
+        c_ids = results['ids'][0]
+        c_docs = results['documents'][0]
+        c_metas = results['metadatas'][0]
+        c_dists = results['distances'][0]
+        vec_ranked = list(c_ids)
+        if not primary_ids:
+            primary_ids = list(c_ids)
+        for i, cid in enumerate(c_ids):
+            if cid not in chunk_data:
+                meta = c_metas[i] if c_metas else {}
+                chunk_data[cid] = {
+                    'text': c_docs[i],
+                    'path': meta.get('path', ''),
+                    'tier': meta.get('tier', 'D'),
+                    'vec_dist': c_dists[i],
+                }
+
+    if not chunk_data:
+        msg = 'No chunks found. Run dsearch2-update first.'
         if args.json:
-            print(json.dumps({'query_original': query_orig, 'query_expanded': query_exp,
-                              'aliases_used': aliases_used, 'total_results': 0,
-                              'message': msg, 'results': []}, ensure_ascii=False, indent=2))
+            print(json.dumps({
+                'query_original': query_orig, 'query_expanded': query_exp,
+                'aliases_used': aliases_used, 'total_results': 0,
+                'message': msg, 'results': []
+            }, ensure_ascii=False, indent=2))
         else:
             print(msg)
         sys.exit(0)
 
-    ids   = results['ids'][0]
-    docs  = results['documents'][0]
-    metas = results['metadatas'][0]
-    dists = results['distances'][0]
-
-    chunk_data = {}
-    for i, cid in enumerate(ids):
-        meta = metas[i] if metas else {}
-        chunk_data[cid] = {
-            'text':     docs[i],
-            'path':     meta.get('path', ''),
-            'tier':     meta.get('tier', 'D'),
-            'vec_dist': dists[i]
-        }
-
-    vec_ranked = list(ids)  # already sorted by ChromaDB distance (ascending = closest)
+    # TF lexical ranking (over all chunks: Cohere + BGE)
     query_terms = query_exp.split()
-    tf_scores   = {cid: tf_score(chunk_data[cid]['text'], query_terms) for cid in ids}
-    tf_ranked   = sorted(ids, key=lambda cid: -tf_scores[cid])
+    tf_scores = {}
+    all_chunk_ids = list(chunk_data.keys())
+    for cid in all_chunk_ids:
+        tf_scores[cid] = tf_score(chunk_data[cid]['text'], query_terms)
+    tf_ranked = sorted(all_chunk_ids, key=lambda cid: -tf_scores[cid])
+
+    # Recoll BM25 — single OR query, then classify by path substring match
+    recoll_path_ranked = None
+    recoll_content_ranked = None
+    if not args.no_recoll:
+        recoll_paths = recoll_search(query_exp)
+        if recoll_paths:
+            rcl_all, new_chunks = fetch_recoll_chunks(_col_cohere, recoll_paths, chunk_data)
+            chunk_data.update(new_chunks)
+            for cid in new_chunks:
+                tf_scores[cid] = tf_score(chunk_data[cid]['text'], query_terms)
+            path_list = []
+            content_list = []
+            for cid in rcl_all:
+                path = chunk_data.get(cid, {}).get('path', '')
+                if classify_recoll_match(path, query_terms) >= 1:
+                    path_list.append(cid)
+                else:
+                    content_list.append(cid)
+            recoll_path_ranked = path_list or None
+            recoll_content_ranked = content_list or None
+
+    # FTS5 BM25 lexical arm (SQLite full-text search)
+    fts5_ranked = None
+    if not args.no_fts5:
+        fts5_ids, fts5_new = fts5_search(query_exp, chunk_data)
+        if fts5_ids:
+            chunk_data.update(fts5_new)
+            for cid in fts5_new:
+                tf_scores[cid] = tf_score(chunk_data[cid]['text'], query_terms)
+            fts5_ranked = fts5_ids
 
     if args.debug:
-        print(f'Chunks fetched: {len(ids)} / {total_chunks} in collection', file=sys.stderr)
-        print(f'Top vec: {vec_ranked[0]} dist={chunk_data[vec_ranked[0]]["vec_dist"]:.4f}', file=sys.stderr)
-        print(f'Top TF:  {tf_ranked[0]}  tf={tf_scores[tf_ranked[0]]:.2f}', file=sys.stderr)
+        mode = 'BGE-only' if not use_cohere else ('dual' if use_bge else 'Cohere-only')
+        print(f'Mode: {mode}, Chunks fetched: {len(primary_ids)} (collection has {total_chunks})', file=sys.stderr)
+        if bge_ranked:
+            print(f'Top BGE: {bge_ranked[0]} dist={chunk_data[bge_ranked[0]]["vec_dist"]:.4f}', file=sys.stderr)
+        if vec_ranked:
+            print(f'Top vec: {vec_ranked[0]} dist={chunk_data[vec_ranked[0]]["vec_dist"]:.4f}', file=sys.stderr)
+        print(f'Top TF:  {tf_ranked[0]} tf={tf_scores[tf_ranked[0]]:.2f}', file=sys.stderr)
+        rp_n = len(recoll_path_ranked) if recoll_path_ranked else 0
+        rc_n = len(recoll_content_ranked) if recoll_content_ranked else 0
+        if rp_n or rc_n:
+            prim_set = set(primary_ids)
+            all_rcl = (recoll_path_ranked or []) + (recoll_content_ranked or [])
+            print(f'Recoll:  path={rp_n} content={rc_n} (new: {len([c for c in all_rcl if c not in prim_set])})', file=sys.stderr)
+        f5_n = len(fts5_ranked) if fts5_ranked else 0
+        if f5_n:
+            prim_set = set(primary_ids)
+            print(f'FTS5:    {f5_n} hits (new: {len([c for c in fts5_ranked if c not in prim_set])}, W={W_FTS5})', file=sys.stderr)
 
-    ranked, scores = rrf_merge(vec_ranked, tf_ranked, chunk_data, query_text=query_orig)
+    # Weighted RRF merge (vector + TF + split Recoll channels + BGE-M3 + FTS5)
+    ranked, scores = rrf_merge(vec_ranked or [], tf_ranked, chunk_data, query_text=query_orig,
+                               recoll_path_ids=recoll_path_ranked, recoll_content_ids=recoll_content_ranked,
+                               bge_ranked_ids=bge_ranked, fts5_ranked_ids=fts5_ranked)
+    protect_source = vec_ranked if use_cohere else bge_ranked
+    if (recoll_path_ranked or recoll_content_ranked) and protect_source:
+        ranked = vector_protect(ranked, protect_source)
 
+    if not args.no_dedup:
+        ranked = dedup_per_file(ranked, chunk_data, max_per_file=1)
+
+    # output
     if args.json:
         print(build_json_output(ranked, scores, chunk_data, args.top, query_orig, query_exp, aliases_used))
     else:
@@ -336,8 +756,25 @@ def main():
             print(f'Aliases expanded: {", ".join(aliases_used[:10])}{"..." if len(aliases_used)>10 else ""}')
             print()
         print_terminal(ranked, scores, chunk_data, args.top)
-        print(f'\n{min(args.top, len(ranked))} of {len(ranked)} passages shown '
-              f'(collection: {total_chunks} chunks)')
+        hyde_tag = '+HyDE' if args.hyde else ''
+        mode_note = f' [BGE-only{hyde_tag}]' if not use_cohere else (f' [dual{hyde_tag}]' if use_bge else ' [Cohere]')
+        recoll_note = ''
+        if recoll_path_ranked or recoll_content_ranked:
+            prim_set = set(primary_ids)
+            all_rcl = (recoll_path_ranked or []) + (recoll_content_ranked or [])
+            new_from_recoll = len([c for c in all_rcl if c not in prim_set])
+            rp_n = len(recoll_path_ranked) if recoll_path_ranked else 0
+            rc_n = len(recoll_content_ranked) if recoll_content_ranked else 0
+            recoll_note = f', recoll: {rp_n} path + {rc_n} content ({new_from_recoll} new)'
+        cohere_note = ''
+        if vec_ranked and use_cohere:
+            cohere_note = f', cohere: {len(vec_ranked)}'
+        fts5_note = ''
+        if fts5_ranked:
+            prim_set2 = set(primary_ids)
+            fts5_new_n = len([c for c in fts5_ranked if c not in prim_set2])
+            fts5_note = f', fts5: {len(fts5_ranked)} ({fts5_new_n} new, W={W_FTS5})'
+        print(f'\n{min(args.top, len(ranked))} of {len(ranked)} passages shown{mode_note} (collection: {total_chunks} chunks{recoll_note}{cohere_note}{fts5_note})')
 
 if __name__ == '__main__':
     main()
