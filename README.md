@@ -1,12 +1,12 @@
 # semantic-disk-search
 
-Hybrid semantic search for a local document corpus. Combines **BM25** (Recoll/Xapian), **vector search** (Cohere + ChromaDB HNSW), **4-way Reciprocal Rank Fusion**, **HyDE** query expansion, and **Claude agents** for ranked, cited answers.
+Hybrid semantic search for a local document corpus. Combines **BM25** (Recoll/Xapian), **vector search** (BGE-M3 + Cohere + ChromaDB HNSW), **5-arm Reciprocal Rank Fusion**, **HyDE** query expansion (optional), and **Claude agents** for ranked, cited answers.
 
 Tested on a 144 GB multilingual corpus — 128K files, 950K chunks — PDFs, Word files, spreadsheets, scanned images (with OCR), emails, and plain text in Greek + English.
 
 Each document is assigned an **authority tier** (A = official/institutional → D = noise) at index time via a regex classifier with optional Haiku LLM fallback. Tier acts as a tiebreaker in RRF ranking and surfaces as citation labels in answers (⚠ unconfirmed for C-tier personal notes).
 
-**Current performance (v7.1c):** 70% Recall@20, 29% Recall@1 on a 105-query golden test set — comparable to cross-lingual hybrid benchmarks (MKQA: 67.8%) on a harder corpus (OCR noise, bilingual, meaning-in-paths).
+**Current performance (v7.2, production):** 54.3% Recall@20 on a 70-query stress-test golden set (38 easy + 32 hard queries). Easy subset: 78.9% (30/38). Note: the older 70% figure was on a different, easier 105-query eval set.
 
 ## What it does
 
@@ -41,13 +41,13 @@ Five models are indexed. `dsearch-multimodel` can search any of them independent
 
 | Key | Model | Dim | Notes |
 |---|---|---|---|
-| `cohere-v3` ★ | `cohere/embed-multilingual-v3.0` | 1024 | Best multilingual precision; default for `dsearch` |
+| `bge-m3` ★ | `BAAI/bge-m3` | 1024 | Primary vector arm in dsearch2; strong MTEB benchmarks |
+| `cohere-v3` | `cohere/embed-multilingual-v3.0` | 1024 | Optional (`--cohere` flag); best multilingual precision |
 | `e5-base` | `intfloat/multilingual-e5-base` | 768 | Good retrieval asymmetry for long docs |
 | `e5-large` | `intfloat/multilingual-e5-large` | 1024 | Broadest coverage for legal/procedural text |
 | `gte` | `Alibaba-NLP/gte-multilingual-base` | 768 | Sharpest score distribution; 8 K context |
-| `bge-m3` | `BAAI/bge-m3` | 1024 | Strong MTEB benchmarks; slower on short queries |
 
-★ = default
+★ = primary (dsearch2 default)
 
 ---
 
@@ -254,22 +254,22 @@ dsearch-multimodel --model e5  "pump maintenance schedule"
 
 ## dsearch2 — hybrid retriever (v2)
 
-`dsearch2` is a standalone hybrid retriever built on top of the Cohere ChromaDB index. It fuses **4 retrieval signals** through weighted **RRF (Reciprocal Rank Fusion)**: vector similarity, TF lexical scoring, Recoll BM25 path matching, and Recoll BM25 content matching — plus **alias expansion** for multilingual synonym matching and **document tier classification** (A/B/C/D reliability tiers via regex + optional LLM fallback).
+`dsearch2` is a standalone hybrid retriever with a **5-arm architecture** fused through weighted **RRF (Reciprocal Rank Fusion)**: BGE-M3 vector (W=1.0), TF-IDF lexical (W=1.0), Recoll BM25 path (W=1.5), Recoll BM25 content (W=0.0, disabled), and FTS5 (W=0.0, disabled) — plus **alias expansion** for multilingual synonym matching and **document tier classification** (A/B/C/D reliability tiers via regex + optional LLM fallback). BGE-M3 is the primary vector arm; Cohere is retained as optional (`--cohere` to enable). Three-store architecture: Cohere ChromaDB + BGE ChromaDB + SQLite.
 
 ### How it differs from `dsearch`
 
 | Feature | dsearch | dsearch2 |
 |---|---|---|
-| Vector retrieval | Cohere + ChromaDB | Cohere + ChromaDB |
-| Lexical scoring | None | TF over returned chunks |
+| Vector retrieval | Cohere + ChromaDB | BGE-M3 + ChromaDB (primary); Cohere optional |
+| Lexical scoring | None | TF-IDF over returned chunks |
 | BM25 integration | None | Recoll path + content (split channels) |
-| Rank fusion | Vector rank only | 4-way weighted RRF (vector + TF + Recoll path + Recoll content) |
+| Rank fusion | Vector rank only | 5-arm weighted RRF (BGE vector + TF-IDF + Recoll path + Recoll content + FTS5) |
 | Alias expansion | Via Claude Step 1 | Built-in, from alias_map.json |
 | Source tier | None | A/B/C/D classifier (regex + optional Haiku LLM) |
 | Claude calls | Yes (Steps 1, 4, 6) | None — retrieval only |
 | Output modes | terminal, HTML, answer | terminal, JSON |
 | HNSW candidate pool | n_results × 3 | max(n_results × 3, 1000) |
-| Recall@20 (105 queries) | — | 70% (v7.1c) |
+| Recall@20 (70 stress-test queries) | — | 54.3% (v7.2) |
 
 The larger candidate pool (`max(..., 1000)`) is critical for HNSW recall on large collections (950K+ chunks) where a small probe set degrades accuracy.
 
@@ -345,6 +345,7 @@ docs/
   flow/dsearch.html    dsearch script flow diagram
   flow/dsearch-answer.html  answer pipeline flow diagram
   recoll_experiments.md    BM25 tuning experiment log
+  experiments-report.html  full experiments report (HyDE, FTS5, weight sweeps)
   PROJECT-REPORT.md    full project report with benchmark results
 
 notebooks/
@@ -389,15 +390,18 @@ See `notebooks/01_model_comparison.ipynb` for the full comparison with charts.
 | v6 | 105 | Vector + Cohere Rerank | 29% | 58% |
 | v7 | 105 | Vector + Recoll BM25 (equal weights) | 25% | 64% |
 | v7.1 | 105 | Weighted RRF + split Recoll (path/content) | 29% | 69% |
-| **v7.1c** | **105** | **Grid-optimal weights + classifier + fixes** | **29%** | **70%** |
+| v7.1c | 105 | Grid-optimal weights + classifier + fixes | 29% | 70% |
+| **v7.2** | **70** | **BGE-M3 + 5-arm RRF (stress-test set)** | **—** | **54.3%** |
 
-**v7.1c production weights:** `W_VEC=1.0, W_TF=1.0, W_RECOLL_PATH=1.5, W_RECOLL_CONTENT=0.0`
+**v7.2 production weights:** `W_BGE_VEC=1.0, W_TF=1.0, W_RECOLL_PATH=1.5, W_RECOLL_CONTENT=0.0 (disabled), W_FTS5=0.0 (disabled)`
 
-Key insight: the 4-way weighted RRF fusion (v7.1c) outperformed the Cohere Rerank cross-encoder (v6) by 12 points on Recall@20, demonstrating that complementary signals (vector + lexical + filesystem path BM25) provide more information than a single learned reranker.
+> **Eval set change:** v7.2 uses a harder 70-query golden set (38 easy + 32 hard stress-test queries). The 105-query set used through v7.1c was retired as too easy. Easy subset Recall@20: 78.9% (30/38).
 
-### BGE-M3 pilot (dual-embed experiment)
+Key insight: multi-signal RRF fusion outperforms a single reranker by a wide margin, demonstrating that complementary signals (vector + lexical + filesystem path BM25) provide more information than any single model.
 
-A/B test of BGE-M3 dense embeddings (1024-dim) against Cohere on the 32 residual misses:
+### BGE-M3 integration (dual-embed)
+
+BGE-M3 (1024-dim dense embeddings) is now fully integrated as the **primary vector arm**. During the pilot phase, A/B testing on 32 residual misses showed:
 
 | Verdict | Count | Meaning |
 |---|---|---|
@@ -406,9 +410,11 @@ A/B test of BGE-M3 dense embeddings (1024-dim) against Cohere on the 32 residual
 | Both hit | 2/32 | Both models find the target |
 | Both miss | 20/32 | Neither finds it (OCR garbage, meaning-in-path only) |
 
-Regression test on 73 currently-successful queries: 5/73 (6.8%) would regress on a full swap. This led to the **dual-embed** decision: keep Cohere as the stability anchor and add BGE-M3 as a 5th RRF arm rather than replacing Cohere.
+Regression test on 73 queries showed 5/73 (6.8%) would regress on a full Cohere swap. This led to the **dual-embed architecture**: BGE-M3 as primary, Cohere retained as optional (`--cohere`). Three-store design: Cohere ChromaDB + BGE ChromaDB + SQLite.
 
-**Projected Recall@20 with dual-embed:** ~77–80% (net +7 to +10 after RRF weight tuning).
+### FTS5 experiment (rejected)
+
+SQLite FTS5 was tested as a 5th retrieval arm across 4 weight configurations. Result: the lexical axis is already saturated by TF-IDF + Recoll — FTS5 produced 0 gains and 1–2 regressions. Disabled (W=0.0).
 
 ### Comparison with other systems
 
@@ -421,7 +427,8 @@ No other personal disk search tool publishes Recall@K benchmarks. The closest co
 | Hybrid BM25+dense (MS MARCO) | Recall@10 | 80.8% | Clean English |
 | Cross-lingual hybrid (MKQA) | Recall@20 | 67.8% | Multilingual |
 | Local hybrid RAG (tuned 30/70) | Recall@5 | 81.6% | Clean local docs |
-| **dsearch2 v7.1c** | **Recall@20** | **70%** | **Greek+English, OCR, mixed formats** |
+| dsearch2 v7.1c (retired eval) | Recall@20 | 70% | Greek+English, OCR, mixed formats |
+| **dsearch2 v7.2 (stress-test)** | **Recall@20** | **54.3%** | **Greek+English, OCR, mixed formats (harder eval set)** |
 
 dsearch2 operates on a significantly harder corpus than standard benchmarks: bilingual (Greek + English), noisy OCR, meaning encoded in file paths/names, and extreme document diversity (payslips, legal docs, SCADA reports, teaching materials, dental X-rays).
 
@@ -460,17 +467,17 @@ GTE requires `transformers==4.49` due to a RoPE embedding bug introduced in 4.50
 **Why Claude CLI instead of the API?**  
 The answer pipeline uses `claude -p` (Claude Code headless mode) so it inherits the user's existing subscription. No separate API key or billing setup needed for the LLM steps.
 
-**Why HyDE?**  
-Vocabulary mismatch is the main failure mode for domain-specific document search. A generated hypothetical answer contains the domain vocabulary that the real documents use, dramatically improving recall on terminology-gap queries.
+**Why HyDE? (optional, `--hyde` flag)**  
+HyDE was tested as a default and **rejected** — net -5.7pp (gained 3 abstract queries, lost 7 navigational). It remains available as a manual `--hyde` flag for abstract/conceptual queries where vocabulary mismatch is the main barrier.
 
 **Why agent ranking instead of a reranker?**  
 Cross-encoder rerankers require running a model locally per (query, doc) pair — expensive at 100 documents. Claude agents read the actual extracted text and score on relevance to the *intent*, not just lexical similarity. Running 10 agents via subscription costs nothing extra per query — no per-token billing — while spinning up a GPU reranker would require local hardware or cloud GPU time.
 
-**Why 4-way RRF instead of a single reranker?**  
-Grid-optimal weighted RRF (v7.1c) outperforms Cohere Rerank by 12 points on Recall@20. Each signal captures different failure modes: vector catches semantic similarity, TF catches exact term matches, Recoll path exploits filesystem hierarchy (folder names, dates in paths). No single model captures all three — fusion is strictly better.
+**Why 5-arm RRF instead of a single reranker?**  
+Multi-signal weighted RRF outperforms Cohere Rerank by 12 points on Recall@20. Each signal captures different failure modes: vector catches semantic similarity, TF-IDF catches exact term matches, Recoll path exploits filesystem hierarchy (folder names, dates in paths). No single model captures all three — fusion is strictly better. (FTS5 was tested as a 5th active arm but proved the lexical axis is saturated — disabled.)
 
-**Why dual-embed (planned) instead of model swap?**  
-A BGE-M3 pilot showed 10/32 miss rescues with 0 Cohere wins, but a regression test revealed 5/73 hits would break on a full swap. Adding BGE-M3 as a 5th RRF arm (dual-embed) captures the rescues while the retained Cohere arm protects current hits. Trade-off: 2× storage and slightly higher query latency (~1.5s vs ~0.5s).
+**Why dual-embed instead of model swap?**  
+The BGE-M3 pilot showed 10/32 miss rescues with 0 Cohere wins, but a regression test revealed 5/73 hits would break on a full swap. Dual-embed (BGE-M3 primary + Cohere optional) captures the rescues while the retained Cohere arm protects current hits when enabled. Trade-off: 2x storage and slightly higher query latency (~1.5s vs ~0.5s).
 
 ---
 
@@ -481,7 +488,7 @@ A BGE-M3 pilot showed 10/32 miss rescues with 0 Cohere wins, but a regression te
 | Python | 3.10+ | |
 | Recoll | any recent | BM25 index |
 | Claude CLI | latest | `dsearch-answer` only |
-| Cohere API key | — | queries + index builds |
+| Cohere API key | — | optional (`--cohere` flag) |
 | `pdftotext` | — | poppler-utils |
 | `antiword` | — | legacy `.doc` files |
 | faiss-cpu | 1.7+ | |

@@ -171,6 +171,46 @@ a { color: var(--blue); }
 </ul>
 <p><span class="verdict verdict-minor">METHODOLOGY FIX</span> True production misses = 30, not 32. Production Recall@20 = <strong>75/105 = 71.4%</strong>.</p>
 
+<!-- ═══ EXPERIMENT 8: HYDE ═══ -->
+<h2>8. HyDE — Hypothetical Document Embeddings</h2>
+<p>Query rewrite via Ollama qwen2.5:7b: generate a hypothetical answer document, embed <em>that</em> instead of the raw query. Tested against golden v1 (70 stress-test queries).</p>
+<table>
+<tr><th>Config</th><th>Hits</th><th>Recall@20</th><th>&Delta; vs vanilla</th></tr>
+<tr><td>Vanilla (no HyDE)</td><td class="num hit">38</td><td class="num">54.3%</td><td class="dim">&mdash;</td></tr>
+<tr><td>HyDE enabled</td><td class="num miss">23</td><td class="num miss">32.9%</td><td class="miss">&minus;5.7pp (net &minus;4)</td></tr>
+</table>
+<div class="card">
+<div class="card-title">HyDE: +3 abstract queries, &minus;7 navigational</div>
+<ul>
+<li><strong>Gained:</strong> tax calculation, property valuation, legal precedent (abstract/reasoning queries)</li>
+<li><strong>Lost:</strong> payroll spreadsheet, alarm config notes, tool commands, recipe PDF (navigational/keyword queries)</li>
+<li><strong>Latency:</strong> +15&ndash;22s per query (Ollama inference on CPU)</li>
+</ul>
+</div>
+<p><span class="verdict verdict-dead">DEAD AS DEFAULT</span> HyDE rewrites replace the user's specific keywords with generic paraphrases, destroying navigational intent. Kept as opt-in <code>--hyde</code> flag for abstract queries only.</p>
+
+<!-- ═══ EXPERIMENT 9: FTS5 GRID SEARCH ═══ -->
+<h2>9. FTS5 Grid Search — Lexical Saturation Test</h2>
+<p>SQLite FTS5 BM25 (unicode61 tokenizer, 950K chunks) tested as a 5th active RRF arm across 4 weight configurations. Golden v1 (70 queries).</p>
+<table>
+<tr><th>Config</th><th>W_FTS5</th><th>Hits</th><th>Recall@20</th><th>&Delta;</th></tr>
+<tr><td>Baseline (no FTS5)</td><td class="num">0.0</td><td class="num hit">38</td><td class="num">54.3%</td><td class="dim">&mdash;</td></tr>
+<tr><td>FTS5 light</td><td class="num">0.25</td><td class="num">38</td><td class="num">54.3%</td><td class="dim">0</td></tr>
+<tr><td>FTS5 medium</td><td class="num">0.50</td><td class="num">37</td><td class="num miss">52.9%</td><td class="miss">&minus;1</td></tr>
+<tr><td>FTS5 strong</td><td class="num">0.75</td><td class="num">37</td><td class="num miss">52.9%</td><td class="miss">&minus;1</td></tr>
+<tr><td>FTS5 full</td><td class="num">1.00</td><td class="num">36</td><td class="num miss">51.4%</td><td class="miss">&minus;2</td></tr>
+</table>
+<div class="card">
+<div class="card-title">Why FTS5 failed: lexical axis saturated</div>
+<ul>
+<li>TF-IDF arm + Recoll path BM25 already capture all available keyword signal</li>
+<li>FTS5 adds <strong>redundant lexical coverage</strong> &mdash; same keywords, different scoring</li>
+<li>Common-keyword noise from FTS5 displaces marginal rank 15&ndash;18 correct hits below the top-20 cutoff</li>
+<li>At W=1.0, two correct hits are pushed from rank ~18&ndash;19 to ~21&ndash;23</li>
+</ul>
+</div>
+<p><span class="verdict verdict-dead">DEAD</span> 0 gains at any weight, 1&ndash;2 regressions at W &ge; 0.5. FTS5 weight permanently set to 0.0. Lexical retrieval axis is saturated &mdash; further gains require non-lexical approaches (data quality, re-chunking, or entity injection).</p>
+
 <!-- ═══ ARCHITECTURE DECISION ═══ -->
 <h2>Architecture Decision: Dual-Embed</h2>
 
@@ -193,12 +233,15 @@ a { color: var(--blue); }
 <tr><td>Recoll content BM25</td><td class="num">0/13 new</td><td><span class="verdict verdict-dead">DEAD</span></td><td>Recoll index missing OCR/scanned content</td></tr>
 <tr><td>Alias expansion</td><td class="num">2/32</td><td><span class="verdict verdict-minor">MINOR</span></td><td>Helps niche queries; already in production</td></tr>
 <tr><td><strong>BGE-M3 dual-embed</strong></td><td class="num hit">10/32</td><td><span class="verdict verdict-live">VIABLE</span></td><td>Only approach that fixes coverage gap</td></tr>
+<tr><td>HyDE query rewrite</td><td class="num miss">−4 net</td><td><span class="verdict verdict-dead">DEAD (default)</span></td><td>+3 abstract, −7 navigational; opt-in --hyde only</td></tr>
+<tr><td>SQLite FTS5 BM25</td><td class="num miss">0/70</td><td><span class="verdict verdict-dead">DEAD</span></td><td>Lexical axis saturated; 0 gains, 1-2 regressions</td></tr>
 </table>
 
 <h3>Comparison with other systems</h3>
 <table>
 <tr><th>System</th><th>Scale</th><th>Recall@K</th><th>Method</th></tr>
-<tr style="background:rgba(166,227,161,0.08)"><td><strong>dsearch2 v7.1c</strong></td><td><strong>950K chunks, 128K files</strong></td><td class="num hit"><strong>71.4% R@20</strong></td><td><strong>4-way RRF + aliases</strong></td></tr>
+<tr style="background:rgba(166,227,161,0.08)"><td><strong>dsearch2 v7.2</strong></td><td><strong>950K chunks, 128K files</strong></td><td class="num hit"><strong>54.3% R@20</strong> <span class="dim">(70q stress-test)</span></td><td><strong>5-arm RRF (3 active + 2 disabled)</strong></td></tr>
+<tr><td>dsearch2 v7.1c</td><td>950K chunks, 128K files</td><td class="num">71.4% R@20 <span class="dim">(105q easier set)</span></td><td>4-way RRF + aliases</td></tr>
 <tr><td>MKQA cross-lingual</td><td>Wikipedia passages</td><td class="num">67.8% R@20</td><td>Hybrid BM25+dense</td></tr>
 <tr><td>PrivateGPT</td><td>~10K pages</td><td class="dim">Unpublished</td><td>RAG + local LLM</td></tr>
 <tr><td>AnythingLLM</td><td>~10K pages</td><td class="dim">Unpublished</td><td>RAG + vectorDB</td></tr>
@@ -206,8 +249,10 @@ a { color: var(--blue); }
 </table>
 
 <p style="margin-top:2rem; color:var(--dim); font-size:0.85rem; border-top:1px solid var(--border); padding-top:1rem;">
-Generated 2026-06-15. Eval set: 105 queries across personal documents, teaching materials, technical manuals, legal filings, and system audits.
-All experiments ran on CPU (i7-8700) with Cohere API for embedding. BGE-M3 via sentence-transformers (dense mode, 1024-dim).
+Updated 2026-06-16. Experiments 1&ndash;7: 105-query eval set. Experiments 8&ndash;9: golden v1 (70 stress-test queries, 38 easy + 32 hard).
+All experiments ran on CPU (i7-8700) with Cohere API for embedding. BGE-M3 via sentence-transformers (dense mode, 1024-dim).<br>
+<strong>See also:</strong> <a href="experiments-report.html" style="color:var(--blue)">Full experiments report</a> &mdash; visual diagrams, saturation curve, and timeline &bull;
+<a href="architecture-v2.html" style="color:var(--blue)">Interactive architecture diagram</a> &mdash; draggable pipeline visualization
 </p>
 
 </body>
